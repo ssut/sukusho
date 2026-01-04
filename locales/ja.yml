@@ -47,6 +47,13 @@ settings:
 
   # General Settings
   general:
+    startup:
+      title: "スタートアップ"
+      run_on_startup_label: "スタートアップで実行"
+      run_on_startup_desc: "Windows起動時に自動的に起動"
+      hide_window_on_start_label: "起動時にウィンドウを非表示"
+      hide_window_on_start_desc: "トレイで起動（通知が表示されます）"
+
     screenshot_dir:
       title: "スクリーンショットディレクトリ"
 
@@ -69,8 +76,8 @@ settings:
         preparing: "準備中..."
         status: "%{current}/%{total} ファイル"
 
-    display:
-      title: "表示"
+    appearance:
+      title: "外観"
       thumbnail_size_label: "サムネイルサイズ"
       thumbnail_size_desc: "サムネイルのサイズ (ピクセル、80-300)"
       thumbnail_size_value: "%{size}px"

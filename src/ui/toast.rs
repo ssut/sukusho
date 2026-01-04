@@ -45,6 +45,7 @@ impl ToastManager {
         self.toasts.push(toast);
     }
 
+    #[allow(dead_code)]
     pub fn remove(&mut self, id: usize) {
         self.toasts.retain(|t| t.id != id);
     }

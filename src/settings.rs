@@ -131,6 +131,14 @@ pub struct Settings {
     /// Theme mode (Dark, Light, System)
     #[serde(default)]
     pub theme: ThemeMode,
+
+    /// Run on Windows startup
+    #[serde(default)]
+    pub run_on_startup: bool,
+
+    /// Hide window on start (show only tray icon)
+    #[serde(default)]
+    pub hide_window_on_start: bool,
 }
 
 fn default_hotkey_enabled() -> bool {
@@ -175,6 +183,8 @@ impl Default for Settings {
             language: None, // Auto-detect from system
             window_opacity: 1.0, // Fully opaque by default
             theme: ThemeMode::Dark, // Dark theme by default
+            run_on_startup: false, // Don't run on startup by default
+            hide_window_on_start: false, // Show window by default
         }
     }
 }

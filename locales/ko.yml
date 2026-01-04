@@ -47,6 +47,13 @@ settings:
 
   # General Settings
   general:
+    startup:
+      title: "시작프로그램"
+      run_on_startup_label: "시작프로그램으로 등록"
+      run_on_startup_desc: "Windows 시작 시 자동으로 실행"
+      hide_window_on_start_label: "시작 시 창 숨기기"
+      hide_window_on_start_desc: "트레이로 시작 (알림이 표시됩니다)"
+
     screenshot_dir:
       title: "스크린샷 디렉토리"
 
@@ -69,8 +76,8 @@ settings:
         preparing: "준비 중..."
         status: "%{current}/%{total} 파일"
 
-    display:
-      title: "표시"
+    appearance:
+      title: "외형"
       thumbnail_size_label: "썸네일 크기"
       thumbnail_size_desc: "썸네일 크기 (픽셀, 80-300)"
       thumbnail_size_value: "%{size}px"

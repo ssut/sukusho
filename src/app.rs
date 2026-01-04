@@ -206,6 +206,130 @@ fn apply_theme(
     gpui_component::theme::Theme::change(theme_mode, Some(window), cx);
 }
 
+/// Register app to run on Windows startup
+#[cfg(windows)]
+fn register_startup() {
+    use windows::Win32::System::Registry::{
+        RegSetValueExW, RegOpenKeyExW, HKEY, HKEY_CURRENT_USER, KEY_WRITE, REG_SZ,
+    };
+    use windows::core::PCWSTR;
+    use std::os::windows::ffi::OsStrExt;
+
+    unsafe {
+        let subkey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run\0"
+            .encode_utf16()
+            .collect::<Vec<u16>>();
+        let value_name = "Sukusho\0".encode_utf16().collect::<Vec<u16>>();
+
+        let mut hkey: HKEY = HKEY::default();
+        if RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(subkey.as_ptr()),
+            0,
+            KEY_WRITE,
+            &mut hkey,
+        )
+        .is_ok()
+        {
+            // Get executable path
+            if let Ok(exe_path) = std::env::current_exe() {
+                let exe_str = exe_path.as_os_str()
+                    .encode_wide()
+                    .chain(std::iter::once(0))
+                    .collect::<Vec<u16>>();
+
+                // Convert to byte slice
+                let data_bytes = std::slice::from_raw_parts(
+                    exe_str.as_ptr() as *const u8,
+                    exe_str.len() * 2,
+                );
+
+                let _ = RegSetValueExW(
+                    hkey,
+                    PCWSTR(value_name.as_ptr()),
+                    0,
+                    REG_SZ,
+                    Some(data_bytes),
+                );
+
+                info!("Registered Sukusho to run on Windows startup");
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn register_startup() {
+    // Not implemented for non-Windows
+}
+
+/// Unregister app from Windows startup
+#[cfg(windows)]
+fn unregister_startup() {
+    use windows::Win32::System::Registry::{
+        RegDeleteValueW, RegOpenKeyExW, HKEY, HKEY_CURRENT_USER, KEY_WRITE,
+    };
+    use windows::core::PCWSTR;
+
+    unsafe {
+        let subkey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run\0"
+            .encode_utf16()
+            .collect::<Vec<u16>>();
+        let value_name = "Sukusho\0".encode_utf16().collect::<Vec<u16>>();
+
+        let mut hkey: HKEY = HKEY::default();
+        if RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(subkey.as_ptr()),
+            0,
+            KEY_WRITE,
+            &mut hkey,
+        )
+        .is_ok()
+        {
+            let _ = RegDeleteValueW(hkey, PCWSTR(value_name.as_ptr()));
+            info!("Unregistered Sukusho from Windows startup");
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn unregister_startup() {
+    // Not implemented for non-Windows
+}
+
+/// Hide window from taskbar
+#[cfg(windows)]
+fn hide_from_taskbar(window: &mut Window) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongW, SetWindowLongW, GWL_EXSTYLE, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW,
+    };
+
+    unsafe {
+        if let Ok(handle) = window.window_handle() {
+            if let RawWindowHandle::Win32(win32) = handle.as_raw() {
+                let hwnd = HWND(win32.hwnd.get() as *mut _);
+
+                // Get current extended window styles
+                let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
+
+                // Add WS_EX_TOOLWINDOW and remove WS_EX_APPWINDOW to hide from taskbar
+                let new_style = (ex_style | WS_EX_TOOLWINDOW.0 as i32) & !(WS_EX_APPWINDOW.0 as i32);
+                SetWindowLongW(hwnd, GWL_EXSTYLE, new_style);
+
+                info!("Window hidden from taskbar");
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn hide_from_taskbar(_window: &mut Window) {
+    // Not implemented for non-Windows
+}
+
 /// Set window opacity/transparency
 #[cfg(windows)]
 fn set_window_opacity(window: &mut Window, opacity: f32) {
@@ -605,6 +729,9 @@ impl Sukusho {
 
         // Set initial window opacity
         set_window_opacity(window, settings.window_opacity);
+
+        // Hide from taskbar
+        hide_from_taskbar(window);
 
         // Apply initial theme
         apply_theme(settings.theme, window, cx);
@@ -1804,6 +1931,52 @@ impl Sukusho {
         v_flex()
             .w_full()
             .gap_2()
+            // Startup
+            .child(self.render_section_header(&t!("settings.general.startup.title").to_string(), cx))
+            .child(
+                self.render_setting_row(
+                    &t!("settings.general.startup.run_on_startup_label").to_string(),
+                    Some(&t!("settings.general.startup.run_on_startup_desc").to_string()),
+                    Switch::new("run-on-startup")
+                        .checked(settings.run_on_startup)
+                        .on_click(cx.listener(move |_this, checked, _, cx| {
+                            let checked = *checked;
+                            {
+                                let app_state = cx.global::<AppState>();
+                                let mut settings = app_state.settings.lock();
+                                settings.run_on_startup = checked;
+                                let _ = settings.save();
+                            }
+                            // Register/unregister from Windows startup
+                            if checked {
+                                register_startup();
+                            } else {
+                                unregister_startup();
+                            }
+                            cx.notify();
+                        })),
+                    cx,
+                ),
+            )
+            .child(
+                self.render_setting_row(
+                    &t!("settings.general.startup.hide_window_on_start_label").to_string(),
+                    Some(&t!("settings.general.startup.hide_window_on_start_desc").to_string()),
+                    Switch::new("hide-on-start")
+                        .checked(settings.hide_window_on_start)
+                        .on_click(cx.listener(move |_this, checked, _, cx| {
+                            let checked = *checked;
+                            {
+                                let app_state = cx.global::<AppState>();
+                                let mut settings = app_state.settings.lock();
+                                settings.hide_window_on_start = checked;
+                                let _ = settings.save();
+                            }
+                            cx.notify();
+                        })),
+                    cx,
+                ),
+            )
             // Language
             .child(self.render_section_header(&language_title, cx))
             .child(
@@ -1867,11 +2040,11 @@ impl Sukusho {
                 )
             )
             // Theme
-            .child(self.render_section_header(&t!("settings.general.display.theme_label").to_string(), cx))
+            .child(self.render_section_header(&t!("settings.general.appearance.theme_label").to_string(), cx))
             .child(
                 self.render_setting_row(
-                    &t!("settings.general.display.theme_label").to_string(),
-                    Some(&t!("settings.general.display.theme_desc").to_string()),
+                    &t!("settings.general.appearance.theme_label").to_string(),
+                    Some(&t!("settings.general.appearance.theme_desc").to_string()),
                     h_flex()
                         .gap_1()
                         .child(
@@ -1879,7 +2052,7 @@ impl Sukusho {
                                 .small()
                                 .when(settings.theme == crate::settings::ThemeMode::Dark, |b| b.primary())
                                 .when(settings.theme != crate::settings::ThemeMode::Dark, |b| b.outline())
-                                .label(t!("settings.general.display.theme_dark").to_string())
+                                .label(t!("settings.general.appearance.theme_dark").to_string())
                                 .on_click(cx.listener(|_this, _, window, cx| {
                                     {
                                         let app_state = cx.global::<AppState>();
@@ -1896,7 +2069,7 @@ impl Sukusho {
                                 .small()
                                 .when(settings.theme == crate::settings::ThemeMode::Light, |b| b.primary())
                                 .when(settings.theme != crate::settings::ThemeMode::Light, |b| b.outline())
-                                .label(t!("settings.general.display.theme_light").to_string())
+                                .label(t!("settings.general.appearance.theme_light").to_string())
                                 .on_click(cx.listener(|_this, _, window, cx| {
                                     {
                                         let app_state = cx.global::<AppState>();
@@ -1913,7 +2086,7 @@ impl Sukusho {
                                 .small()
                                 .when(settings.theme == crate::settings::ThemeMode::System, |b| b.primary())
                                 .when(settings.theme != crate::settings::ThemeMode::System, |b| b.outline())
-                                .label(t!("settings.general.display.theme_system").to_string())
+                                .label(t!("settings.general.appearance.theme_system").to_string())
                                 .on_click(cx.listener(|_this, _, window, cx| {
                                     {
                                         let app_state = cx.global::<AppState>();
@@ -2142,11 +2315,11 @@ impl Sukusho {
                     ),
             )
             // Display Settings
-            .child(self.render_section_header(&t!("settings.general.display.title").to_string(), cx))
+            .child(self.render_section_header(&t!("settings.general.appearance.title").to_string(), cx))
             .child(
                 self.render_setting_row(
-                    &t!("settings.general.display.thumbnail_size_label").to_string(),
-                    Some(&t!("settings.general.display.thumbnail_size_desc").to_string()),
+                    &t!("settings.general.appearance.thumbnail_size_label").to_string(),
+                    Some(&t!("settings.general.appearance.thumbnail_size_desc").to_string()),
                     h_flex()
                         .gap_2()
                         .items_center()
@@ -2176,7 +2349,7 @@ impl Sukusho {
                                 .rounded(px(4.0))
                                 .bg(cx.theme().muted)
                                 .text_sm()
-                                .child(t!("settings.general.display.thumbnail_size_value", size = thumbnail_size).to_string()),
+                                .child(t!("settings.general.appearance.thumbnail_size_value", size = thumbnail_size).to_string()),
                         )
                         .child(
                             Button::new("thumb-plus")
@@ -2201,8 +2374,8 @@ impl Sukusho {
             // Window Opacity slider
             .child(
                 self.render_setting_row(
-                    &t!("settings.general.display.window_opacity_label").to_string(),
-                    Some(&t!("settings.general.display.window_opacity_desc").to_string()),
+                    &t!("settings.general.appearance.window_opacity_label").to_string(),
+                    Some(&t!("settings.general.appearance.window_opacity_desc").to_string()),
                     h_flex()
                         .gap_2()
                         .items_center()
@@ -2233,7 +2406,7 @@ impl Sukusho {
                                 .rounded(px(4.0))
                                 .bg(cx.theme().muted)
                                 .text_sm()
-                                .child(t!("settings.general.display.window_opacity_value", opacity = (self.window_opacity * 100.0) as u32).to_string()),
+                                .child(t!("settings.general.appearance.window_opacity_value", opacity = (self.window_opacity * 100.0) as u32).to_string()),
                         )
                         .child(
                             Button::new("opacity-plus")

@@ -45,6 +45,7 @@ fn detect_system_language() -> String {
 }
 
 /// Get current language display name
+#[allow(dead_code)]
 pub fn current_language_name() -> String {
     let current = rust_i18n::locale().to_string();
     SUPPORTED_LANGUAGES

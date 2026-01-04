@@ -34,6 +34,7 @@ windows = { version = "0.58", features = [
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
     "Win32_UI_Controls",
+    "Win32_UI_HiDpi",
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Dwm",
     "Win32_System_Memory",
@@ -50,7 +51,6 @@ image = { version = "0.24", features = ["png", "jpeg", "webp"] }
 fast_image_resize = "4"
 
 # Async & Threading
-rayon = "1.10"
 crossbeam-channel = "0.5"
 parking_lot = "0.12"
 tokio = { version = "1", features = ["rt", "sync", "macros"] }
@@ -71,8 +71,6 @@ directories = "5"
 log = "0.4"
 env_logger = "0.11"
 anyhow = "1"
-thiserror = "2"
-once_cell = "1"
 chrono = { version = "0.4", features = ["serde"] }
 open = "5"
 raw-window-handle = "0.6"

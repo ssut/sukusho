@@ -13,6 +13,13 @@ use tray_icon::{
 
 use crate::AppMessage;
 
+#[cfg(windows)]
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+#[cfg(windows)]
+use windows::Win32::UI::WindowsAndMessaging::*;
+#[cfg(windows)]
+use windows::Win32::Graphics::Gdi::*;
+
 /// Track if left mouse button is pressed on tray
 static TRAY_MOUSE_DOWN: AtomicBool = AtomicBool::new(false);
 
@@ -194,6 +201,241 @@ pub fn toggle_window() -> bool {
 pub fn toggle_window() -> bool {
     show_window();
     true
+}
+
+/// Show a custom notification window near the system tray
+#[cfg(windows)]
+#[allow(dead_code)]
+pub fn show_tray_notification(title: &str, message: &str) {
+    use windows::core::{w, PCWSTR};
+    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows::Win32::Foundation::COLORREF;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetTimer, GetMessageW, TranslateMessage, DispatchMessageW, MSG,
+    };
+    use windows::Win32::UI::HiDpi::GetDpiForSystem;
+
+    let title = title.to_string();
+    let message = message.to_string();
+
+    std::thread::spawn(move || {
+
+        unsafe {
+            let class_name = w!("SukushoNotificationClass");
+
+            // Register window class
+            let hinstance = GetModuleHandleW(None).unwrap();
+
+            let wc = WNDCLASSW {
+                lpfnWndProc: Some(notification_wndproc),
+                hInstance: hinstance.into(),
+                lpszClassName: class_name,
+                hCursor: LoadCursorW(None, IDC_ARROW).unwrap(),
+                hbrBackground: CreateSolidBrush(COLORREF(0x00000000)), // Transparent black
+                ..Default::default()
+            };
+
+            RegisterClassW(&wc);
+
+            // Get taskbar position to position notification
+            let mut taskbar_rect = RECT::default();
+            if let Ok(taskbar) = FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()) {
+                let _ = GetWindowRect(taskbar, &mut taskbar_rect);
+            }
+
+            // Get DPI for proper scaling
+            let dpi = GetDpiForSystem();
+            let scale = dpi as f32 / 96.0; // 96 is the standard DPI
+
+            // Get screen dimensions
+            let screen_width = GetSystemMetrics(SM_CXSCREEN);
+            let screen_height = GetSystemMetrics(SM_CYSCREEN);
+
+            // Notification dimensions (scaled for DPI)
+            let notif_width = (400.0 * scale) as i32;
+            let notif_height = (140.0 * scale) as i32;
+            let margin = (15.0 * scale) as i32;
+
+            // Position in bottom-right corner, above taskbar
+            let x = screen_width - notif_width - margin;
+            let y = if taskbar_rect.bottom > taskbar_rect.top {
+                taskbar_rect.top - notif_height - margin
+            } else {
+                screen_height - notif_height - margin
+            };
+
+            // Create layered window
+            let hwnd = CreateWindowExW(
+                WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                class_name,
+                w!("Sukusho Notification"),
+                WS_POPUP,
+                x,
+                y,
+                notif_width,
+                notif_height,
+                None,
+                None,
+                hinstance,
+                None,
+            ).unwrap();
+
+            // Set layered window attributes for transparency
+            let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 230, LWA_ALPHA);
+
+            // Show window with fade-in animation
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            let _ = AnimateWindow(hwnd, 200, AW_BLEND);
+
+            // Store title, message, and scale in window data
+            let title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+            let message_wide: Vec<u16> = message.encode_utf16().chain(std::iter::once(0)).collect();
+
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(Box::new((title_wide, message_wide, scale))) as isize);
+
+            // Invalidate to trigger paint
+            let _ = InvalidateRect(hwnd, None, true);
+            let _ = UpdateWindow(hwnd);
+
+            // Set a timer to auto-close after 5 seconds (timer ID = 1)
+            let _ = SetTimer(hwnd, 1, 5000, None);
+
+            // Message loop to keep window alive
+            let mut msg = MSG::default();
+            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+                let _ = TranslateMessage(&msg);
+                let _ = DispatchMessageW(&msg);
+            }
+        }
+    });
+}
+
+#[cfg(windows)]
+#[allow(dead_code)]
+unsafe extern "system" fn notification_wndproc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT { unsafe {
+    use windows::core::w;
+    use windows::Win32::Foundation::COLORREF;
+    use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
+    use windows::Win32::UI::WindowsAndMessaging::KillTimer;
+
+    match msg {
+        WM_PAINT => {
+            let mut ps = PAINTSTRUCT::default();
+            let hdc = BeginPaint(hwnd, &mut ps);
+
+            // Get stored title, message, and scale
+            let user_data = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+            if user_data != 0 {
+                let data_ptr = user_data as *const (Vec<u16>, Vec<u16>, f32);
+                let (title, message, scale) = &*data_ptr;
+
+                // Set up drawing
+                let mut rect = RECT::default();
+                let _ = GetClientRect(hwnd, &mut rect);
+
+                // Fill background with semi-transparent dark color
+                let bg_brush = CreateSolidBrush(COLORREF(0x00262626)); // Dark gray
+                let _ = FillRect(hdc, &rect, bg_brush);
+                let _ = DeleteObject(bg_brush);
+
+                // Draw border
+                let border_brush = CreateSolidBrush(COLORREF(0x00404040)); // Light gray border
+                let _ = FrameRect(hdc, &rect, border_brush);
+                let _ = DeleteObject(border_brush);
+
+                // Set text properties
+                let _ = SetBkMode(hdc, TRANSPARENT);
+                let _ = SetTextColor(hdc, COLORREF(0x00FFFFFF)); // White text
+
+                // Calculate scaled dimensions
+                let padding = (20.0 * scale) as i32;
+                let title_height = (35.0 * scale) as i32;
+                let message_top = (60.0 * scale) as i32;
+                let message_bottom_margin = (15.0 * scale) as i32;
+
+                // Draw title (bold, DPI-scaled font)
+                let mut title_rect = rect.clone();
+                title_rect.top += padding;
+                title_rect.left += padding;
+                title_rect.right -= padding;
+                title_rect.bottom = title_rect.top + title_height;
+
+                let title_font = CreateFontW(
+                    (20.0 * scale) as i32, 0, 0, 0, 700, 0, 0, 0, // DPI-scaled, FW_BOLD
+                    1, // DEFAULT_CHARSET
+                    0, // OUT_DEFAULT_PRECIS
+                    0, // CLIP_DEFAULT_PRECIS
+                    5, // CLEARTYPE_QUALITY
+                    0, // DEFAULT_PITCH | FF_DONTCARE
+                    w!("Segoe UI"),
+                );
+                let old_font = SelectObject(hdc, title_font);
+                let mut title_slice = title.clone();
+                let _ = DrawTextW(hdc, &mut title_slice[..], &mut title_rect, DT_LEFT | DT_TOP | DT_SINGLELINE);
+                let _ = SelectObject(hdc, old_font);
+                let _ = DeleteObject(title_font);
+
+                // Draw message (DPI-scaled font)
+                let mut message_rect = rect.clone();
+                message_rect.top += message_top;
+                message_rect.left += padding;
+                message_rect.right -= padding;
+                message_rect.bottom -= message_bottom_margin;
+
+                let message_font = CreateFontW(
+                    (16.0 * scale) as i32, 0, 0, 0, 400, 0, 0, 0, // DPI-scaled, FW_NORMAL
+                    1, // DEFAULT_CHARSET
+                    0, // OUT_DEFAULT_PRECIS
+                    0, // CLIP_DEFAULT_PRECIS
+                    5, // CLEARTYPE_QUALITY
+                    0, // DEFAULT_PITCH | FF_DONTCARE
+                    w!("Segoe UI"),
+                );
+                let old_font = SelectObject(hdc, message_font);
+                let mut message_slice = message.clone();
+                let _ = DrawTextW(hdc, &mut message_slice[..], &mut message_rect, DT_LEFT | DT_TOP | DT_WORDBREAK);
+                let _ = SelectObject(hdc, old_font);
+                let _ = DeleteObject(message_font);
+            }
+
+            let _ = EndPaint(hwnd, &ps);
+            LRESULT(0)
+        }
+        WM_DESTROY => {
+            // Clean up user data
+            let user_data = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+            if user_data != 0 {
+                let data_ptr = user_data as *mut (Vec<u16>, Vec<u16>, f32);
+                drop(Box::from_raw(data_ptr));
+            }
+            LRESULT(0)
+        }
+        WM_TIMER => {
+            // Timer fired - close the window with animation
+            let _ = KillTimer(hwnd, 1);
+            let _ = AnimateWindow(hwnd, 300, AW_HIDE | AW_BLEND);
+            let _ = DestroyWindow(hwnd);
+            LRESULT(0)
+        }
+        WM_LBUTTONDOWN | WM_RBUTTONDOWN => {
+            // Close on click with faster animation
+            let _ = KillTimer(hwnd, 1);
+            let _ = AnimateWindow(hwnd, 150, AW_HIDE | AW_BLEND);
+            let _ = DestroyWindow(hwnd);
+            LRESULT(0)
+        }
+        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    }
+}}
+
+#[cfg(not(windows))]
+pub fn show_tray_notification(_title: &str, _message: &str) {
+    // Not implemented for non-Windows
 }
 
 pub struct TrayManager {

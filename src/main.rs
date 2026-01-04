@@ -180,7 +180,8 @@ fn main() -> Result<()> {
     let screenshot_dir = settings.screenshot_directory.clone();
     let window_width = settings.window_width;
     let window_height = settings.window_height;
-    
+    let hide_window_on_start = settings.hide_window_on_start;
+
     // Wrap settings in Arc<Mutex> for sharing across threads
     let settings = Arc::new(Mutex::new(settings));
 
@@ -252,8 +253,8 @@ fn main() -> Result<()> {
             ))),
             // No titlebar for clean look
             titlebar: None,
-            focus: true,
-            show: true,
+            focus: !hide_window_on_start,
+            show: !hide_window_on_start,
             // Use Normal window kind to enable resizing
             kind: WindowKind::Normal,
             // Enable dragging for borderless windows on Windows
@@ -289,6 +290,8 @@ fn main() -> Result<()> {
         let _ = cx.on_app_quit(|_cx| async {
             info!("App quit requested");
         });
+
+        // Starting hidden - no notification shown
 
         info!("Sukusho started successfully");
     });

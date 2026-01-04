@@ -47,6 +47,13 @@ settings:
 
   # General Settings
   general:
+    startup:
+      title: "Startup"
+      run_on_startup_label: "Run on Startup"
+      run_on_startup_desc: "Launch Sukusho automatically when Windows starts"
+      hide_window_on_start_label: "Hide Window on Start"
+      hide_window_on_start_desc: "Start minimized to tray (notification will be shown)"
+
     screenshot_dir:
       title: "Screenshot Directory"
 
@@ -69,8 +76,8 @@ settings:
         preparing: "Preparing..."
         status: "%{current}/%{total} files"
 
-    display:
-      title: "Display"
+    appearance:
+      title: "Appearance"
       thumbnail_size_label: "Thumbnail Size"
       thumbnail_size_desc: "Size of thumbnails in pixels (80-300)"
       thumbnail_size_value: "%{size}px"
