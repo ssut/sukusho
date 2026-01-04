@@ -6,7 +6,7 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::notification::{Notification, NotificationType};
 use gpui_component::switch::Switch;
 use gpui_component::WindowExt;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Sizable};
+use gpui_component::{h_flex, v_flex, ActiveTheme, Disableable, Sizable};
 use log::info;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -25,6 +25,7 @@ pub enum SettingsPage {
 
 use crate::clipboard;
 use crate::convert;
+use crate::organizer;
 use crate::settings::ConversionFormat;
 use crate::thumbnail::ThumbnailCache;
 use crate::ui::gallery;
@@ -219,6 +220,15 @@ pub struct TrayBin {
 
     /// Whether we're recording a new hotkey
     recording_hotkey: bool,
+
+    /// Whether we're currently organizing files
+    organizing: bool,
+
+    /// Organization progress (current, total)
+    organize_progress: (usize, usize),
+
+    /// Current file being organized
+    organize_current_file: String,
 }
 
 impl TrayBin {
@@ -238,6 +248,9 @@ impl TrayBin {
             thumbnail_size: settings.thumbnail_size,
             focus_handle: cx.focus_handle(),
             recording_hotkey: false,
+            organizing: false,
+            organize_progress: (0, 0),
+            organize_current_file: String::new(),
         }
     }
 
@@ -379,6 +392,25 @@ impl TrayBin {
                     if let Some(latest) = self.all_screenshots.first() {
                         set_latest_screenshot(Some(latest.path.clone()));
                     }
+                }
+                AppMessage::OrganizeStarted(total) => {
+                    info!("Organization started: {} files", total);
+                    self.organizing = true;
+                    self.organize_progress = (0, total);
+                    self.organize_current_file = String::new();
+                    cx.notify();
+                }
+                AppMessage::OrganizeProgress(current, total, file) => {
+                    self.organize_progress = (current, total);
+                    self.organize_current_file = file;
+                    cx.notify();
+                }
+                AppMessage::OrganizeCompleted => {
+                    info!("Organization completed");
+                    self.organizing = false;
+                    self.organize_progress = (0, 0);
+                    self.organize_current_file = String::new();
+                    cx.notify();
                 }
             }
         }
@@ -1002,7 +1034,14 @@ impl TrayBin {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let screenshot_dir = settings.screenshot_directory.to_string_lossy().to_string();
+        let screenshot_dir_path = settings.screenshot_directory.clone();
         let thumbnail_size = self.thumbnail_size;
+        let organizer_enabled = settings.organizer_enabled;
+        let organizer_format = settings.organizer_format.clone();
+        let format_preview = organizer::format_preview(&organizer_format);
+        let organizing = self.organizing;
+        let organize_progress = self.organize_progress;
+        let organize_current_file = self.organize_current_file.clone();
 
         v_flex()
             .w_full()
@@ -1043,6 +1082,181 @@ impl TrayBin {
                                     }
                                 });
                             }),
+                    ),
+            )
+            // Screenshot Organizer
+            .child(self.render_section_header("Screenshot Organizer", cx))
+            .child(
+                self.render_setting_row(
+                    "Auto-organize Screenshots",
+                    if organizing {
+                        None
+                    } else {
+                        Some("Automatically move new screenshots to date-based folders")
+                    },
+                    Switch::new("organizer-enable")
+                        .checked(organizer_enabled)
+                        .disabled(organizing)
+                        .on_click({
+                            let format = organizer_format.clone();
+                            let base_dir = screenshot_dir_path.clone();
+                            cx.listener(move |this, checked: &bool, _, cx| {
+                                {
+                                    let app_state = cx.global::<AppState>();
+                                    let mut settings = app_state.settings.lock();
+                                    settings.organizer_enabled = *checked;
+                                    let _ = settings.save();
+                                }
+                                // If enabling, organize existing files
+                                if *checked && !this.organizing {
+                                    let tx = {
+                                        let app_state = cx.global::<AppState>();
+                                        app_state.message_tx.clone()
+                                    };
+                                    organizer::organize_existing_files(
+                                        base_dir.clone(),
+                                        format.clone(),
+                                        tx,
+                                    );
+                                }
+                                cx.notify();
+                            })
+                        }),
+                    cx,
+                ),
+            )
+            // Progress bar when organizing
+            .when(organizing, |el| {
+                let (current, total) = organize_progress;
+                let progress_pct = if total > 0 {
+                    (current as f32 / total as f32) * 100.0
+                } else {
+                    0.0
+                };
+                el.child(
+                    v_flex()
+                        .w_full()
+                        .gap_2()
+                        .mb_4()
+                        .child(
+                            // Progress bar container
+                            div()
+                                .w_full()
+                                .h(px(8.0))
+                                .rounded(px(4.0))
+                                .bg(cx.theme().muted)
+                                .overflow_hidden()
+                                .child(
+                                    div()
+                                        .h_full()
+                                        .w(relative(progress_pct / 100.0))
+                                        .bg(cx.theme().primary)
+                                        .rounded(px(4.0)),
+                                ),
+                        )
+                        .child(
+                            h_flex()
+                                .w_full()
+                                .justify_between()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .max_w(px(200.0))
+                                        .overflow_x_hidden()
+                                        .child(if organize_current_file.is_empty() {
+                                            "Preparing...".to_string()
+                                        } else {
+                                            organize_current_file
+                                        }),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(format!("{}/{} files", current, total)),
+                                ),
+                        ),
+                )
+            })
+            .child(
+                v_flex()
+                    .w_full()
+                    .gap_2()
+                    .mb_4()
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .justify_between()
+                            .items_center()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(cx.theme().foreground)
+                                    .child("Folder Format"),
+                            )
+                            .child(
+                                h_flex()
+                                    .gap_1()
+                                    .child(
+                                        Button::new("fmt-ymd")
+                                            .small()
+                                            .when(organizer_format == "YYYY-MM-DD", |s| s.primary())
+                                            .when(organizer_format != "YYYY-MM-DD", |s| s.outline())
+                                            .label("YYYY-MM-DD")
+                                            .on_click(cx.listener(|_this, _, _, cx| {
+                                                {
+                                                    let app_state = cx.global::<AppState>();
+                                                    let mut settings = app_state.settings.lock();
+                                                    settings.organizer_format =
+                                                        "YYYY-MM-DD".to_string();
+                                                    let _ = settings.save();
+                                                }
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("fmt-ym")
+                                            .small()
+                                            .when(organizer_format == "YYYY-MM", |s| s.primary())
+                                            .when(organizer_format != "YYYY-MM", |s| s.outline())
+                                            .label("YYYY-MM")
+                                            .on_click(cx.listener(|_this, _, _, cx| {
+                                                {
+                                                    let app_state = cx.global::<AppState>();
+                                                    let mut settings = app_state.settings.lock();
+                                                    settings.organizer_format =
+                                                        "YYYY-MM".to_string();
+                                                    let _ = settings.save();
+                                                }
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("fmt-ymd-slash")
+                                            .small()
+                                            .when(organizer_format == "YYYY/MM/DD", |s| s.primary())
+                                            .when(organizer_format != "YYYY/MM/DD", |s| s.outline())
+                                            .label("YYYY/MM/DD")
+                                            .on_click(cx.listener(|_this, _, _, cx| {
+                                                {
+                                                    let app_state = cx.global::<AppState>();
+                                                    let mut settings = app_state.settings.lock();
+                                                    settings.organizer_format =
+                                                        "YYYY/MM/DD".to_string();
+                                                    let _ = settings.save();
+                                                }
+                                                cx.notify();
+                                            })),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(format!("Preview: {}", format_preview)),
                     ),
             )
             // Display Settings

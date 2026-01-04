@@ -6,6 +6,7 @@ mod clipboard;
 mod convert;
 mod drag_drop;
 mod hotkey;
+mod organizer;
 mod settings;
 mod thumbnail;
 mod tray;
@@ -61,6 +62,12 @@ pub enum AppMessage {
     ChangeDirectory(PathBuf),
     /// Request latest screenshot path (for tray drag)
     RequestLatestScreenshot,
+    /// Organization started with total file count
+    OrganizeStarted(usize),
+    /// Organization progress update (current, total, current_file)
+    OrganizeProgress(usize, usize, String),
+    /// Organization completed
+    OrganizeCompleted,
     /// Quit application
     Quit,
 }
@@ -80,7 +87,7 @@ pub fn get_latest_screenshot() -> Option<PathBuf> {
 
 /// Global application state shared across threads
 pub struct AppState {
-    pub settings: Mutex<Settings>,
+    pub settings: Arc<Mutex<Settings>>,
     pub message_tx: Sender<AppMessage>,
     pub message_rx: Receiver<AppMessage>,
     pub tray_manager: Arc<Mutex<Option<TrayManager>>>,
@@ -128,6 +135,9 @@ fn main() -> Result<()> {
     let screenshot_dir = settings.screenshot_directory.clone();
     let window_width = settings.window_width;
     let window_height = settings.window_height;
+    
+    // Wrap settings in Arc<Mutex> for sharing across threads
+    let settings = Arc::new(Mutex::new(settings));
 
     // Create message channels
     let (message_tx, message_rx) = unbounded::<AppMessage>();
@@ -151,8 +161,11 @@ fn main() -> Result<()> {
 
     // Initialize global hotkey with custom setting
     let hotkey_message_tx = message_tx.clone();
-    let hotkey_str = settings.hotkey.clone();
-    if settings.hotkey_enabled {
+    let (hotkey_str, hotkey_enabled) = {
+        let s = settings.lock();
+        (s.hotkey.clone(), s.hotkey_enabled)
+    };
+    if hotkey_enabled {
         if !init_global_hotkey(hotkey_message_tx, &hotkey_str) {
             warn!("Failed to initialize global hotkey");
         }
@@ -163,8 +176,9 @@ fn main() -> Result<()> {
     // Start file watcher in background thread
     let watcher_tx = message_tx.clone();
     let watcher_dir = screenshot_dir.clone();
+    let watcher_settings = Arc::clone(&settings);
     std::thread::spawn(move || {
-        if let Err(e) = ScreenshotWatcher::new(watcher_dir, watcher_tx).run() {
+        if let Err(e) = ScreenshotWatcher::new(watcher_dir, watcher_tx, watcher_settings).run() {
             error!("File watcher error: {}", e);
         }
     });
@@ -178,7 +192,7 @@ fn main() -> Result<()> {
 
         // Store app state globally
         cx.set_global(AppState {
-            settings: Mutex::new(settings),
+            settings: Arc::clone(&settings),
             message_tx,
             message_rx,
             tray_manager: Arc::new(Mutex::new(Some(tray_manager))),

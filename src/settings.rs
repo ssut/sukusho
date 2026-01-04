@@ -71,6 +71,14 @@ pub struct Settings {
     /// Global hotkey string (e.g., "Ctrl+Shift+S")
     #[serde(default = "default_hotkey")]
     pub hotkey: String,
+
+    /// Screenshot organizer enabled
+    #[serde(default)]
+    pub organizer_enabled: bool,
+
+    /// Screenshot organizer date format (e.g., "YYYY-MM-DD", "YYYY/MM/DD", "YYYY-MM")
+    #[serde(default = "default_organizer_format")]
+    pub organizer_format: String,
 }
 
 fn default_hotkey_enabled() -> bool {
@@ -79,6 +87,10 @@ fn default_hotkey_enabled() -> bool {
 
 fn default_hotkey() -> String {
     "Ctrl+Shift+S".to_string()
+}
+
+fn default_organizer_format() -> String {
+    "YYYY-MM-DD".to_string()
 }
 
 impl Default for Settings {
@@ -94,6 +106,8 @@ impl Default for Settings {
             window_height: 650.0,
             hotkey_enabled: true,
             hotkey: "Ctrl+Shift+S".to_string(),
+            organizer_enabled: false,
+            organizer_format: "YYYY-MM-DD".to_string(),
         }
     }
 }

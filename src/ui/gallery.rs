@@ -229,6 +229,7 @@ fn gallery_item(data: GalleryItemData, cx: &mut Context<TrayBin>) -> impl IntoEl
     let path = data.path;
     let path_for_dbl = path.clone();
     let path_for_ctx = path.clone();
+    let path_for_checkbox = path.clone();
     let drag_paths = data.selected_paths.clone();
     let is_selected = data.is_selected;
 
@@ -252,6 +253,20 @@ fn gallery_item(data: GalleryItemData, cx: &mut Context<TrayBin>) -> impl IntoEl
 
     // Badge colors - semi-transparent black with white text for good contrast
     let badge_bg = gpui::hsla(0.0, 0.0, 0.0, 0.75);
+
+    // Checkbox colors - circular design
+    // Selected: solid blue with white check
+    // Unselected: dimmed gray circle
+    let checkbox_bg = if is_selected {
+        gpui::hsla(210.0 / 360.0, 1.0, 0.42, 1.0) // Solid blue (#0078D4) when selected
+    } else {
+        gpui::hsla(0.0, 0.0, 0.2, 0.7) // Dimmed dark gray when unselected
+    };
+    let checkbox_border = if is_selected {
+        gpui::hsla(0.0, 0.0, 1.0, 1.0) // White border when selected
+    } else {
+        gpui::hsla(0.0, 0.0, 0.6, 0.6) // Light gray border when unselected
+    };
 
     div()
         .id(ElementId::Name(
@@ -288,26 +303,53 @@ fn gallery_item(data: GalleryItemData, cx: &mut Context<TrayBin>) -> impl IntoEl
                                 .object_fit(ObjectFit::Contain),
                         ),
                 )
-                // Selection indicator checkmark
-                .when(is_selected, |this: Div| {
-                    this.child(
-                        div()
-                            .absolute()
-                            .top(px(6.0))
-                            .left(px(6.0))
-                            .w(px(20.0))
-                            .h(px(20.0))
-                            .rounded(px(10.0))
-                            .bg(cx.theme().primary)
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_color(cx.theme().primary_foreground)
-                            .text_xs()
-                            .font_weight(FontWeight::BOLD)
-                            .child("✓"),
-                    )
-                })
+                // Selection checkbox - always visible (circular design)
+                .child(
+                    div()
+                        .id(ElementId::Name(format!("checkbox-{}", data.index).into()))
+                        .absolute()
+                        .top(px(6.0))
+                        .left(px(6.0))
+                        .w(px(20.0))
+                        .h(px(20.0))
+                        .rounded(px(10.0)) // Circular
+                        .bg(checkbox_bg)
+                        .border_1()
+                        .border_color(checkbox_border)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .hover(|s| {
+                            s.bg(gpui::hsla(0.0, 0.0, 0.5, 0.8))
+                                .border_color(gpui::rgb(0xFFFFFF))
+                        })
+                        .when(is_selected, |this| {
+                            this.child(
+                                div()
+                                    .text_color(gpui::rgb(0xFFFFFF))
+                                    .text_xs()
+                                    .font_weight(FontWeight::BOLD)
+                                    .child("✓"),
+                            )
+                        })
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |this, _event: &MouseDownEvent, _, cx| {
+                                // Checkbox click = toggle selection (append/remove like Ctrl+click)
+                                this.handle_action(
+                                    GalleryAction::Select {
+                                        path: path_for_checkbox.clone(),
+                                        modifiers: Modifiers {
+                                            control: true, // Act like Ctrl+click to toggle/append
+                                            ..Default::default()
+                                        },
+                                    },
+                                    cx,
+                                );
+                            }),
+                        ),
+                )
                 .child(
                     // File format and size badge - enhanced styling
                     div()

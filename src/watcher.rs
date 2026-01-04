@@ -5,9 +5,13 @@ use crossbeam_channel::Sender;
 use log::{debug, error, info, warn};
 use notify::RecursiveMode;
 use notify_debouncer_full::{new_debouncer, DebounceEventResult};
+use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
+use crate::organizer;
+use crate::settings::Settings;
 use crate::AppMessage;
 
 /// Image extensions we care about
@@ -16,13 +20,19 @@ const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp", 
 pub struct ScreenshotWatcher {
     directory: PathBuf,
     message_tx: Sender<AppMessage>,
+    settings: Arc<Mutex<Settings>>,
 }
 
 impl ScreenshotWatcher {
-    pub fn new(directory: PathBuf, message_tx: Sender<AppMessage>) -> Self {
+    pub fn new(
+        directory: PathBuf,
+        message_tx: Sender<AppMessage>,
+        settings: Arc<Mutex<Settings>>,
+    ) -> Self {
         Self {
             directory,
             message_tx,
+            settings,
         }
     }
 
@@ -39,20 +49,22 @@ impl ScreenshotWatcher {
             std::fs::create_dir_all(&self.directory)?;
         }
 
-        // Scan existing files first
+        // Scan existing files first (includes subdirectories for organized files)
         self.scan_existing_files()?;
 
         // Create debounced watcher
         let tx = self.message_tx.clone();
+        let base_dir = self.directory.clone();
+        let settings = Arc::clone(&self.settings);
         let mut debouncer = new_debouncer(
             Duration::from_millis(200),
             None,
             move |result: DebounceEventResult| {
-                Self::handle_debounced_events(result, &tx);
+                Self::handle_debounced_events(result, &tx, &base_dir, &settings);
             },
         )?;
 
-        // Watch the directory
+        // Watch the directory (non-recursive - we organize files into subdirs)
         debouncer.watch(&self.directory, RecursiveMode::NonRecursive)?;
 
         info!("File watcher started successfully");
@@ -63,30 +75,40 @@ impl ScreenshotWatcher {
         }
     }
 
-    /// Scan existing files in the directory
+    /// Scan existing files in the directory (recursive to include organized subdirectories)
     fn scan_existing_files(&self) -> Result<()> {
         info!("Scanning existing screenshots...");
         let mut count = 0;
+        let mut files = Vec::new();
 
-        if let Ok(entries) = std::fs::read_dir(&self.directory) {
-            // Collect and sort by modified time (newest first)
-            let mut files: Vec<_> = entries
-                .flatten()
-                .filter(|e| Self::is_image_file(&e.path()))
-                .collect();
-
-            files.sort_by(|a, b| {
-                let a_time = a.metadata().and_then(|m| m.modified()).ok();
-                let b_time = b.metadata().and_then(|m| m.modified()).ok();
-                b_time.cmp(&a_time)
-            });
-
-            for entry in files {
-                let path = entry.path();
-                debug!("Found existing screenshot: {:?}", path);
-                let _ = self.message_tx.send(AppMessage::NewScreenshot(path));
-                count += 1;
+        // Recursive scan function
+        fn scan_dir(dir: &Path, files: &mut Vec<PathBuf>) {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        // Recurse into subdirectories
+                        scan_dir(&path, files);
+                    } else if ScreenshotWatcher::is_image_file(&path) {
+                        files.push(path);
+                    }
+                }
             }
+        }
+
+        scan_dir(&self.directory, &mut files);
+
+        // Sort by modified time (newest first)
+        files.sort_by(|a, b| {
+            let a_time = std::fs::metadata(a).and_then(|m| m.modified()).ok();
+            let b_time = std::fs::metadata(b).and_then(|m| m.modified()).ok();
+            b_time.cmp(&a_time)
+        });
+
+        for path in files {
+            debug!("Found existing screenshot: {:?}", path);
+            let _ = self.message_tx.send(AppMessage::NewScreenshot(path));
+            count += 1;
         }
 
         info!("Found {} existing screenshots", count);
@@ -94,11 +116,16 @@ impl ScreenshotWatcher {
     }
 
     /// Handle debounced file system events
-    fn handle_debounced_events(result: DebounceEventResult, tx: &Sender<AppMessage>) {
+    fn handle_debounced_events(
+        result: DebounceEventResult,
+        tx: &Sender<AppMessage>,
+        base_dir: &Path,
+        settings: &Arc<Mutex<Settings>>,
+    ) {
         match result {
             Ok(events) => {
                 for event in events {
-                    Self::process_event(&event, tx);
+                    Self::process_event(&event, tx, base_dir, settings);
                 }
             }
             Err(errors) => {
@@ -110,7 +137,12 @@ impl ScreenshotWatcher {
     }
 
     /// Process a single debounced event
-    fn process_event(event: &notify_debouncer_full::DebouncedEvent, tx: &Sender<AppMessage>) {
+    fn process_event(
+        event: &notify_debouncer_full::DebouncedEvent,
+        tx: &Sender<AppMessage>,
+        base_dir: &Path,
+        settings: &Arc<Mutex<Settings>>,
+    ) {
         use notify::EventKind;
 
         for path in &event.paths {
@@ -121,7 +153,50 @@ impl ScreenshotWatcher {
             match &event.kind {
                 EventKind::Create(_) => {
                     info!("New screenshot detected: {:?}", path);
-                    let _ = tx.send(AppMessage::NewScreenshot(path.clone()));
+
+                    // Check if organizer is enabled
+                    let (organizer_enabled, organizer_format) = {
+                        let s = settings.lock();
+                        (s.organizer_enabled, s.organizer_format.clone())
+                    };
+
+                    if organizer_enabled {
+                        // Organize the file (move to date-based subdirectory)
+                        let path_clone = path.clone();
+                        let base_dir = base_dir.to_path_buf();
+                        let tx = tx.clone();
+
+                        std::thread::spawn(move || {
+                            // Small delay to ensure file is fully written
+                            std::thread::sleep(Duration::from_millis(500));
+
+                            match organizer::organize_file(
+                                &path_clone,
+                                &base_dir,
+                                &organizer_format,
+                            ) {
+                                Ok(Some(new_path)) => {
+                                    // File was moved, send the new path
+                                    info!(
+                                        "Organized screenshot: {:?} -> {:?}",
+                                        path_clone, new_path
+                                    );
+                                    let _ = tx.send(AppMessage::NewScreenshot(new_path));
+                                }
+                                Ok(None) => {
+                                    // File was already organized or in subdirectory
+                                    let _ = tx.send(AppMessage::NewScreenshot(path_clone));
+                                }
+                                Err(e) => {
+                                    // Organization failed, send original path
+                                    error!("Failed to organize screenshot: {}", e);
+                                    let _ = tx.send(AppMessage::NewScreenshot(path_clone));
+                                }
+                            }
+                        });
+                    } else {
+                        let _ = tx.send(AppMessage::NewScreenshot(path.clone()));
+                    }
                 }
                 EventKind::Remove(_) => {
                     info!("Screenshot removed: {:?}", path);
