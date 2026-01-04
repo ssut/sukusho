@@ -243,32 +243,29 @@ fn main() -> Result<()> {
             tray_manager: Arc::new(Mutex::new(Some(tray_manager))),
         });
 
-        // Open main window - popup style (no taskbar, no titlebar)
+        // Open main window - normal resizable window without titlebar
         let window_options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                 None,
                 size(px(window_width), px(window_height)),
                 cx,
             ))),
-            // No titlebar for popup-style window
+            // No titlebar for clean look
             titlebar: None,
             focus: true,
             show: true,
-            // Make it a popup-style window (no taskbar entry)
-            kind: WindowKind::PopUp,
-            // Enable dragging for borderless popup windows on Windows
+            // Use Normal window kind to enable resizing
+            kind: WindowKind::Normal,
+            // Enable dragging for borderless windows on Windows
             is_movable: true,
+            // Set minimum window size (600x400)
+            window_min_size: Some(size(px(600.0), px(400.0))),
             ..Default::default()
         };
 
         let _window_handle = cx
             .open_window(window_options, |window, cx| {
-                // Set dark mode theme for a richer visual experience
-                gpui_component::theme::Theme::change(
-                    gpui_component::theme::ThemeMode::Dark,
-                    Some(window),
-                    cx,
-                );
+                // Theme will be set by Sukusho::new() based on settings
 
                 // Get HWND and store it for tray operations
                 #[cfg(windows)]

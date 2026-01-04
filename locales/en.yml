@@ -75,6 +75,16 @@ settings:
       thumbnail_size_desc: "Size of thumbnails in pixels (80-300)"
       thumbnail_size_value: "%{size}px"
 
+      window_opacity_label: "Window Transparency"
+      window_opacity_desc: "Adjust window transparency (0% = transparent, 100% = opaque)"
+      window_opacity_value: "%{opacity}%"
+
+      theme_label: "Color Theme"
+      theme_desc: "Choose color theme (System follows OS settings)"
+      theme_dark: "Dark"
+      theme_light: "Light"
+      theme_system: "System"
+
   # Conversion Settings
   conversion:
     auto_convert:

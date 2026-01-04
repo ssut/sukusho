@@ -129,6 +129,119 @@ pub fn pick_folder() -> Option<PathBuf> {
     None
 }
 
+/// Detect Windows system theme (Dark or Light)
+#[cfg(windows)]
+fn detect_system_theme() -> gpui_component::theme::ThemeMode {
+    use windows::Win32::System::Registry::{
+        RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, REG_VALUE_TYPE,
+    };
+    use windows::core::PCWSTR;
+
+    unsafe {
+        let subkey = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
+            .encode_utf16()
+            .collect::<Vec<u16>>();
+        let value_name = "AppsUseLightTheme\0".encode_utf16().collect::<Vec<u16>>();
+
+        let mut hkey: HKEY = HKEY::default();
+        if RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(subkey.as_ptr()),
+            0,
+            KEY_READ,
+            &mut hkey,
+        )
+        .is_ok()
+        {
+            let mut data: u32 = 0;
+            let mut data_size: u32 = std::mem::size_of::<u32>() as u32;
+            let mut reg_type: REG_VALUE_TYPE = REG_VALUE_TYPE(0);
+
+            if RegQueryValueExW(
+                hkey,
+                PCWSTR(value_name.as_ptr()),
+                None,
+                Some(&mut reg_type),
+                Some(&mut data as *mut u32 as *mut u8),
+                Some(&mut data_size),
+            )
+            .is_ok()
+            {
+                // 0 = Dark, 1 = Light
+                if data == 0 {
+                    info!("System theme detected: Dark");
+                    return gpui_component::theme::ThemeMode::Dark;
+                } else {
+                    info!("System theme detected: Light");
+                    return gpui_component::theme::ThemeMode::Light;
+                }
+            }
+        }
+    }
+
+    // Default to Dark if detection fails
+    info!("System theme detection failed, defaulting to Dark");
+    gpui_component::theme::ThemeMode::Dark
+}
+
+#[cfg(not(windows))]
+fn detect_system_theme() -> gpui_component::theme::ThemeMode {
+    // Default to Dark on non-Windows platforms
+    gpui_component::theme::ThemeMode::Dark
+}
+
+/// Apply theme based on settings
+fn apply_theme(
+    theme_setting: crate::settings::ThemeMode,
+    window: &mut Window,
+    cx: &mut Context<impl Render>,
+) {
+    let theme_mode = match theme_setting {
+        crate::settings::ThemeMode::Dark => gpui_component::theme::ThemeMode::Dark,
+        crate::settings::ThemeMode::Light => gpui_component::theme::ThemeMode::Light,
+        crate::settings::ThemeMode::System => detect_system_theme(),
+    };
+
+    info!("Applying theme: {:?}", theme_mode);
+    gpui_component::theme::Theme::change(theme_mode, Some(window), cx);
+}
+
+/// Set window opacity/transparency
+#[cfg(windows)]
+fn set_window_opacity(window: &mut Window, opacity: f32) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongW, SetWindowLongW, SetLayeredWindowAttributes, GWL_EXSTYLE, LWA_ALPHA,
+        WS_EX_LAYERED,
+    };
+
+    unsafe {
+        if let Ok(handle) = window.window_handle() {
+            if let RawWindowHandle::Win32(win32) = handle.as_raw() {
+                let hwnd = HWND(win32.hwnd.get() as *mut _);
+
+                // Get current extended window styles
+                let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
+
+                // Add WS_EX_LAYERED style to enable transparency
+                SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED.0 as i32);
+
+                // Set the opacity (0-255 where 0 is fully transparent, 255 is fully opaque)
+                let alpha = (opacity * 255.0) as u8;
+                let _ = SetLayeredWindowAttributes(hwnd, None, alpha, LWA_ALPHA);
+
+                info!("Window opacity set to: {}% (alpha: {})", (opacity * 100.0) as u32, alpha);
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn set_window_opacity(_window: &mut Window, _opacity: f32) {
+    // Not implemented for non-Windows
+}
+
 /// Number of items to load per page
 const PAGE_SIZE: usize = 50;
 
@@ -290,6 +403,9 @@ pub struct Sukusho {
 
     /// Toast notification manager
     toast_manager: crate::ui::ToastManager,
+
+    /// Current window opacity (0.0 = fully transparent, 1.0 = fully opaque)
+    window_opacity: f32,
 }
 
 impl Sukusho {
@@ -431,6 +547,7 @@ impl Sukusho {
             search_results: None,
             index_stats: crate::indexer::IndexStats::default(),
             toast_manager: crate::ui::ToastManager::new(),
+            window_opacity: settings.window_opacity,
         };
 
         // Prewarm models if indexing is enabled (creates SINGLE shared model instances)
@@ -485,6 +602,12 @@ impl Sukusho {
                 }
             });
         }
+
+        // Set initial window opacity
+        set_window_opacity(window, settings.window_opacity);
+
+        // Apply initial theme
+        apply_theme(settings.theme, window, cx);
 
         app
     }
@@ -1170,6 +1293,25 @@ impl Render for Sukusho {
         // Process any pending messages
         self.process_messages(window, cx);
 
+        // Save window size if changed
+        let bounds = window.bounds();
+        let current_width: f32 = bounds.size.width.into();
+        let current_height: f32 = bounds.size.height.into();
+
+        let app_state = cx.global::<AppState>();
+        let settings = app_state.settings.lock();
+        let saved_width = settings.window_width;
+        let saved_height = settings.window_height;
+        drop(settings);
+
+        // Only save if size actually changed (avoid constant writes)
+        if (current_width - saved_width).abs() > 1.0 || (current_height - saved_height).abs() > 1.0 {
+            let mut settings = app_state.settings.lock();
+            settings.window_width = current_width;
+            settings.window_height = current_height;
+            let _ = settings.save();
+        }
+
         let total_count = self.all_screenshots.len();
         let visible_count = self.visible_screenshots().len();
         let selected_count = self.selected.len();
@@ -1179,8 +1321,8 @@ impl Render for Sukusho {
         v_flex()
             .id("main-container")
             .size_full()
-            // Semi-transparent background to allow acrylic blur to show through
-            .bg(gpui::hsla(0.0, 0.0, 0.08, 0.85))
+            // Use theme background color
+            .bg(cx.theme().background)
             .track_focus(&self.focus_handle)
             // Keyboard shortcuts
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
@@ -1276,9 +1418,9 @@ impl Render for Sukusho {
                     .id("header-container")
                     .w_full()
                     .border_b_1()
-                    .border_color(gpui::hsla(0.0, 0.0, 0.3, 0.3))
-                    // Semi-transparent header for acrylic effect
-                    .bg(gpui::hsla(0.0, 0.0, 0.12, 0.8))
+                    .border_color(cx.theme().border)
+                    // Use theme muted background for header
+                    .bg(cx.theme().popover)
                     .child(
                         h_flex()
                             .w_full()
@@ -1724,6 +1866,68 @@ impl Sukusho {
                     cx,
                 )
             )
+            // Theme
+            .child(self.render_section_header(&t!("settings.general.display.theme_label").to_string(), cx))
+            .child(
+                self.render_setting_row(
+                    &t!("settings.general.display.theme_label").to_string(),
+                    Some(&t!("settings.general.display.theme_desc").to_string()),
+                    h_flex()
+                        .gap_1()
+                        .child(
+                            Button::new("theme-dark")
+                                .small()
+                                .when(settings.theme == crate::settings::ThemeMode::Dark, |b| b.primary())
+                                .when(settings.theme != crate::settings::ThemeMode::Dark, |b| b.outline())
+                                .label(t!("settings.general.display.theme_dark").to_string())
+                                .on_click(cx.listener(|_this, _, window, cx| {
+                                    {
+                                        let app_state = cx.global::<AppState>();
+                                        let mut settings = app_state.settings.lock();
+                                        settings.theme = crate::settings::ThemeMode::Dark;
+                                        let _ = settings.save();
+                                    }
+                                    apply_theme(crate::settings::ThemeMode::Dark, window, cx);
+                                    cx.notify();
+                                }))
+                        )
+                        .child(
+                            Button::new("theme-light")
+                                .small()
+                                .when(settings.theme == crate::settings::ThemeMode::Light, |b| b.primary())
+                                .when(settings.theme != crate::settings::ThemeMode::Light, |b| b.outline())
+                                .label(t!("settings.general.display.theme_light").to_string())
+                                .on_click(cx.listener(|_this, _, window, cx| {
+                                    {
+                                        let app_state = cx.global::<AppState>();
+                                        let mut settings = app_state.settings.lock();
+                                        settings.theme = crate::settings::ThemeMode::Light;
+                                        let _ = settings.save();
+                                    }
+                                    apply_theme(crate::settings::ThemeMode::Light, window, cx);
+                                    cx.notify();
+                                }))
+                        )
+                        .child(
+                            Button::new("theme-system")
+                                .small()
+                                .when(settings.theme == crate::settings::ThemeMode::System, |b| b.primary())
+                                .when(settings.theme != crate::settings::ThemeMode::System, |b| b.outline())
+                                .label(t!("settings.general.display.theme_system").to_string())
+                                .on_click(cx.listener(|_this, _, window, cx| {
+                                    {
+                                        let app_state = cx.global::<AppState>();
+                                        let mut settings = app_state.settings.lock();
+                                        settings.theme = crate::settings::ThemeMode::System;
+                                        let _ = settings.save();
+                                    }
+                                    apply_theme(crate::settings::ThemeMode::System, window, cx);
+                                    cx.notify();
+                                })),
+                        ),
+                    cx,
+                )
+            )
             // Screenshot Directory
             .child(self.render_section_header(&screenshot_dir_title, cx))
             .child(
@@ -1988,6 +2192,64 @@ impl Sukusho {
                                         settings.thumbnail_size = new_size;
                                         let _ = settings.save();
                                     }
+                                    cx.notify();
+                                })),
+                        ),
+                    cx,
+                ),
+            )
+            // Window Opacity slider
+            .child(
+                self.render_setting_row(
+                    &t!("settings.general.display.window_opacity_label").to_string(),
+                    Some(&t!("settings.general.display.window_opacity_desc").to_string()),
+                    h_flex()
+                        .gap_2()
+                        .items_center()
+                        .child(
+                            Button::new("opacity-minus")
+                                .ghost()
+                                .compact()
+                                .label("-")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    let new_opacity = (this.window_opacity - 0.05).max(0.3);
+                                    this.window_opacity = new_opacity;
+                                    {
+                                        let app_state = cx.global::<AppState>();
+                                        let mut settings = app_state.settings.lock();
+                                        settings.window_opacity = new_opacity;
+                                        let _ = settings.save();
+                                    }
+                                    set_window_opacity(window, new_opacity);
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            div()
+                                .w(px(60.0))
+                                .text_center()
+                                .px_2()
+                                .py_1()
+                                .rounded(px(4.0))
+                                .bg(cx.theme().muted)
+                                .text_sm()
+                                .child(t!("settings.general.display.window_opacity_value", opacity = (self.window_opacity * 100.0) as u32).to_string()),
+                        )
+                        .child(
+                            Button::new("opacity-plus")
+                                .ghost()
+                                .compact()
+                                .label("+")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    let new_opacity = (this.window_opacity + 0.05).min(1.0);
+                                    this.window_opacity = new_opacity;
+                                    {
+                                        let app_state = cx.global::<AppState>();
+                                        let mut settings = app_state.settings.lock();
+                                        settings.window_opacity = new_opacity;
+                                        let _ = settings.save();
+                                    }
+                                    set_window_opacity(window, new_opacity);
                                     cx.notify();
                                 })),
                         ),

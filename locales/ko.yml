@@ -75,6 +75,16 @@ settings:
       thumbnail_size_desc: "썸네일 크기 (픽셀, 80-300)"
       thumbnail_size_value: "%{size}px"
 
+      window_opacity_label: "창 투명도"
+      window_opacity_desc: "창 투명도 조정 (0% = 투명, 100% = 불투명)"
+      window_opacity_value: "%{opacity}%"
+
+      theme_label: "컬러 테마"
+      theme_desc: "컬러 테마 선택 (시스템은 OS 설정을 따릅니다)"
+      theme_dark: "다크"
+      theme_light: "라이트"
+      theme_system: "시스템"
+
   # Conversion Settings
   conversion:
     auto_convert:

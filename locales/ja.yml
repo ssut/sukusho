@@ -75,6 +75,16 @@ settings:
       thumbnail_size_desc: "サムネイルのサイズ (ピクセル、80-300)"
       thumbnail_size_value: "%{size}px"
 
+      window_opacity_label: "ウィンドウの透明度"
+      window_opacity_desc: "ウィンドウの透明度を調整 (0% = 透明、100% = 不透明)"
+      window_opacity_value: "%{opacity}%"
+
+      theme_label: "カラーテーマ"
+      theme_desc: "カラーテーマを選択 (システムはOS設定に従います)"
+      theme_dark: "ダーク"
+      theme_light: "ライト"
+      theme_system: "システム"
+
   # Conversion Settings
   conversion:
     auto_convert:

@@ -7,6 +7,30 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+/// Theme mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThemeMode {
+    Dark,
+    Light,
+    System,
+}
+
+impl Default for ThemeMode {
+    fn default() -> Self {
+        ThemeMode::Dark
+    }
+}
+
+impl ThemeMode {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ThemeMode::Dark => "Dark",
+            ThemeMode::Light => "Light",
+            ThemeMode::System => "System",
+        }
+    }
+}
+
 /// Supported conversion formats
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConversionFormat {
@@ -99,6 +123,14 @@ pub struct Settings {
     /// User-selected language (None = auto-detect from system)
     #[serde(default)]
     pub language: Option<String>,
+
+    /// Window transparency (0.0 = fully transparent, 1.0 = fully opaque)
+    #[serde(default = "default_window_opacity")]
+    pub window_opacity: f32,
+
+    /// Theme mode (Dark, Light, System)
+    #[serde(default)]
+    pub theme: ThemeMode,
 }
 
 fn default_hotkey_enabled() -> bool {
@@ -115,6 +147,10 @@ fn default_organizer_format() -> String {
 
 fn default_cpu_mode() -> String {
     "normal".to_string()
+}
+
+fn default_window_opacity() -> f32 {
+    1.0 // Fully opaque by default
 }
 
 impl Default for Settings {
@@ -137,6 +173,8 @@ impl Default for Settings {
             models_downloaded: false,
             last_indexed_count: 0,
             language: None, // Auto-detect from system
+            window_opacity: 1.0, // Fully opaque by default
+            theme: ThemeMode::Dark, // Dark theme by default
         }
     }
 }
