@@ -20,6 +20,7 @@ mod settings;
 mod thumbnail;
 mod tray;
 mod ui;
+mod update_checker;
 mod watcher;
 
 use anyhow::Result;
@@ -128,6 +129,7 @@ pub struct AppState {
     pub message_tx: Sender<AppMessage>,
     pub message_rx: Receiver<AppMessage>,
     pub tray_manager: Arc<Mutex<Option<TrayManager>>>,
+    pub hide_window_on_start: bool,
 }
 
 impl Global for AppState {}
@@ -174,6 +176,11 @@ fn main() -> Result<()> {
     // Load settings
     let settings = Settings::load().unwrap_or_default();
 
+    // Log settings file location
+    if let Some(config_path) = Settings::config_path() {
+        info!("Settings file location: {:?}", config_path);
+    }
+
     // Initialize language from settings or system locale
     i18n_helpers::init_language(&settings);
 
@@ -181,6 +188,8 @@ fn main() -> Result<()> {
     let window_width = settings.window_width;
     let window_height = settings.window_height;
     let hide_window_on_start = settings.hide_window_on_start;
+
+    info!("Loaded window size from settings: {}x{} (will be used directly as GPUI logical pixels)", window_width, window_height);
 
     // Wrap settings in Arc<Mutex> for sharing across threads
     let settings = Arc::new(Mutex::new(settings));
@@ -242,32 +251,30 @@ fn main() -> Result<()> {
             message_tx,
             message_rx,
             tray_manager: Arc::new(Mutex::new(Some(tray_manager))),
+            hide_window_on_start,
         });
 
-        // Open main window - normal resizable window without titlebar
+        // Open main window - use Bounds::centered like official GPUI example
+        let bounds = Bounds::centered(None, size(px(window_width), px(window_height)), cx);
+
         let window_options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-                None,
-                size(px(window_width), px(window_height)),
-                cx,
-            ))),
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
             // No titlebar for clean look
             titlebar: None,
-            focus: !hide_window_on_start,
-            show: !hide_window_on_start,
+            // Always show and focus - we'll hide after first render if needed
+            focus: true,
+            show: true,
             // Use Normal window kind to enable resizing
             kind: WindowKind::Normal,
             // Enable dragging for borderless windows on Windows
             is_movable: true,
-            // Set minimum window size (600x400)
-            window_min_size: Some(size(px(600.0), px(400.0))),
+            // No minimum window size - let user resize freely
+            window_min_size: None,
             ..Default::default()
         };
 
         let _window_handle = cx
             .open_window(window_options, |window, cx| {
-                // Theme will be set by Sukusho::new() based on settings
-
                 // Get HWND and store it for tray operations
                 #[cfg(windows)]
                 {

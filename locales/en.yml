@@ -34,6 +34,7 @@ tray:
   tooltip: "Sukusho - Screenshot Manager"
   menu:
     settings: "Settings"
+    check_for_updates: "Check for Updates"
     quit: "Quit"
 
 # Settings Tabs
@@ -161,6 +162,7 @@ settings:
     version: "Version %{version}"
     description: "A lightweight screenshot manager that lives in your system tray. Quickly access, organize, and share your screenshots."
     github_button: "GitHub"
+    check_updates_button: "Check for Updates"
     made_with: "Made with GPUI"
 
 # Common UI Elements
@@ -195,6 +197,12 @@ notifications:
     failed: "Indexing failed: %{error}"
     loading_vision: "Loading Vision Model"
     loading_text: "Loading Text Model"
+
+  update:
+    checking: "Checking for updates..."
+    available: "Update available! Opening releases page..."
+    up_to_date: "You're on the latest version"
+    check_failed: "Failed to check for updates"
 
   error:
     generic: "An error occurred: %{message}"

@@ -34,6 +34,7 @@ tray:
   tooltip: "Sukusho - スクリーンショットマネージャー"
   menu:
     settings: "設定"
+    check_for_updates: "アップデートを確認"
     quit: "終了"
 
 # Settings Tabs
@@ -161,6 +162,7 @@ settings:
     version: "バージョン %{version}"
     description: "システムトレイで動作する軽量なスクリーンショットマネージャー。スクリーンショットに素早くアクセスし、整理、共有できます。"
     github_button: "GitHub"
+    check_updates_button: "アップデートを確認"
     made_with: "Made with GPUI"
 
 # Common UI Elements
@@ -195,6 +197,12 @@ notifications:
     failed: "インデックスに失敗: %{error}"
     loading_vision: "ビジョンモデル読み込み中"
     loading_text: "テキストモデル読み込み中"
+
+  update:
+    checking: "アップデートを確認中..."
+    available: "アップデートがあります！リリースページを開いています..."
+    up_to_date: "最新バージョンを使用しています"
+    check_failed: "アップデートの確認に失敗しました"
 
   error:
     generic: "エラーが発生しました: %{message}"

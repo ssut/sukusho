@@ -8,7 +8,7 @@ use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::notification::{Notification, NotificationType};
 use gpui_component::switch::Switch;
 use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
-use log::{error, info};
+use log::{debug, error, info};
 use rust_i18n::t;
 use parking_lot::Mutex;
 use std::collections::HashSet;
@@ -530,6 +530,11 @@ pub struct Sukusho {
 
     /// Current window opacity (0.0 = fully transparent, 1.0 = fully opaque)
     window_opacity: f32,
+
+    /// Track if this is the first render (to skip saving initial bounds and handle hide_window_on_start)
+    first_render: bool,
+    /// Track if we've already hidden the window on start (to do it only once)
+    hidden_on_start: bool,
 }
 
 impl Sukusho {
@@ -672,6 +677,8 @@ impl Sukusho {
             index_stats: crate::indexer::IndexStats::default(),
             toast_manager: crate::ui::ToastManager::new(),
             window_opacity: settings.window_opacity,
+            first_render: true,
+            hidden_on_start: false,
         };
 
         // Prewarm models if indexing is enabled (creates SINGLE shared model instances)
@@ -814,6 +821,19 @@ impl Sukusho {
 
     /// Process incoming messages from background threads
     fn process_messages(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Blur detection disabled - was causing issues with window not showing
+        // TODO: Re-implement with proper debouncing if needed
+        // let is_focused = crate::tray::is_window_focused();
+        // if self.was_focused && !is_focused {
+        //     // Window just lost focus
+        //     // Hide window if we're on gallery page (not settings)
+        //     if !self.settings_open {
+        //         info!("Window lost focus on gallery page - hiding window");
+        //         crate::tray::hide_window();
+        //     }
+        // }
+        // self.was_focused = is_focused;
+
         // Update toast manager to remove expired toasts
         self.toast_manager.update();
 
@@ -1420,7 +1440,8 @@ impl Render for Sukusho {
         // Process any pending messages
         self.process_messages(window, cx);
 
-        // Save window size if changed
+        // Save window size if changed (position is always centered, no need to save)
+        // window.bounds() returns GPUI logical pixels (already DPI-scaled by GPUI)
         let bounds = window.bounds();
         let current_width: f32 = bounds.size.width.into();
         let current_height: f32 = bounds.size.height.into();
@@ -1431,12 +1452,37 @@ impl Render for Sukusho {
         let saved_height = settings.window_height;
         drop(settings);
 
-        // Only save if size actually changed (avoid constant writes)
-        if (current_width - saved_width).abs() > 1.0 || (current_height - saved_height).abs() > 1.0 {
+        // Skip saving on first render (window is still being initialized)
+        if self.first_render {
+            self.first_render = false;
+            debug!("First render - skipping window size save. Current: {}x{} (GPUI logical pixels)",
+                   current_width, current_height);
+            // Update in-memory settings
             let mut settings = app_state.settings.lock();
             settings.window_width = current_width;
             settings.window_height = current_height;
-            let _ = settings.save();
+            drop(settings);
+
+            // Hide window after first render if hide_window_on_start is set
+            if app_state.hide_window_on_start && !self.hidden_on_start {
+                self.hidden_on_start = true;
+                info!("First render complete - hiding window (hide_window_on_start = true)");
+                crate::tray::hide_window();
+            }
+        } else {
+            // Only save if size actually changed (avoid constant writes)
+            let size_changed = (current_width - saved_width).abs() > 1.0 || (current_height - saved_height).abs() > 1.0;
+
+            if size_changed {
+                debug!("Window size changed: {}x{} -> {}x{}", saved_width, saved_height, current_width, current_height);
+                let mut settings = app_state.settings.lock();
+                settings.window_width = current_width;
+                settings.window_height = current_height;
+                match settings.save() {
+                    Ok(_) => debug!("Window size saved successfully"),
+                    Err(e) => log::warn!("Failed to save window size: {}", e),
+                }
+            }
         }
 
         let total_count = self.all_screenshots.len();
@@ -2508,7 +2554,7 @@ impl Sukusho {
                     cx,
                 ),
             )
-            // Quality
+            // Quality (only for JPEG, WebP doesn't support lossy quality in image crate)
             .child(
                 self.render_setting_row(
                     &t!("settings.conversion.quality.label").to_string(),
@@ -2521,6 +2567,7 @@ impl Sukusho {
                                 .ghost()
                                 .compact()
                                 .label("-")
+                                .when(format == ConversionFormat::WebP, |s| s.disabled(true))
                                 .on_click(cx.listener(|_this, _, _, cx| {
                                     {
                                         let app_state = cx.global::<AppState>();
@@ -2541,6 +2588,7 @@ impl Sukusho {
                                 .rounded(px(4.0))
                                 .bg(cx.theme().muted)
                                 .text_sm()
+                                .when(format == ConversionFormat::WebP, |s| s.opacity(0.5))
                                 .child(format!("{}", quality)),
                         )
                         .child(
@@ -2548,6 +2596,7 @@ impl Sukusho {
                                 .ghost()
                                 .compact()
                                 .label("+")
+                                .when(format == ConversionFormat::WebP, |s| s.disabled(true))
                                 .on_click(cx.listener(|_this, _, _, cx| {
                                     {
                                         let app_state = cx.global::<AppState>();
@@ -3073,6 +3122,34 @@ impl Sukusho {
                             .on_click(|_, _, cx| {
                                 cx.open_url("https://github.com/ssut/sukusho");
                             }),
+                    )
+                    .child(
+                        Button::new("check-updates")
+                            .outline()
+                            .small()
+                            .label(&t!("settings.about.check_updates_button").to_string())
+                            .on_click(cx.listener(|_this, _, _, _cx| {
+                                info!("Check for updates requested from About settings");
+                                std::thread::spawn(|| {
+                                    use crate::update_checker;
+                                    info!("{}", rust_i18n::t!("notifications.update.checking"));
+
+                                    match update_checker::check_for_updates() {
+                                        Ok(has_update) => {
+                                            if has_update {
+                                                info!("{}", rust_i18n::t!("notifications.update.available"));
+                                                update_checker::open_releases_page();
+                                            } else {
+                                                info!("{}", rust_i18n::t!("notifications.update.up_to_date"));
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::warn!("Failed to check for updates: {}", e);
+                                            log::warn!("{}", rust_i18n::t!("notifications.update.check_failed"));
+                                        }
+                                    }
+                                });
+                            })),
                     ),
             )
             // Copyright

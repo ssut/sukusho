@@ -448,9 +448,15 @@ impl TrayManager {
 
         let menu = Menu::new();
         let settings_item = MenuItem::new(&t!("tray.menu.settings"), true, None);
+        let check_updates_item = MenuItem::new(&t!("tray.menu.check_for_updates"), true, None);
         let quit_item = MenuItem::new(&t!("tray.menu.quit"), true, None);
 
-        menu.append_items(&[&settings_item, &PredefinedMenuItem::separator(), &quit_item])?;
+        menu.append_items(&[
+            &settings_item,
+            &check_updates_item,
+            &PredefinedMenuItem::separator(),
+            &quit_item,
+        ])?;
 
         let icon = Self::generate_camera_icon()?;
 
@@ -463,6 +469,7 @@ impl TrayManager {
 
         let menu_tx = message_tx.clone();
         let settings_id = settings_item.id().clone();
+        let check_updates_id = check_updates_item.id().clone();
         let quit_id = quit_item.id().clone();
 
         std::thread::spawn(move || {
@@ -472,6 +479,27 @@ impl TrayManager {
                     if event.id == settings_id {
                         show_window();
                         let _ = menu_tx.send(AppMessage::OpenSettings);
+                    } else if event.id == check_updates_id {
+                        info!("Check for updates requested from tray menu");
+                        std::thread::spawn(|| {
+                            use crate::update_checker;
+                            info!("{}", rust_i18n::t!("notifications.update.checking"));
+
+                            match update_checker::check_for_updates() {
+                                Ok(has_update) => {
+                                    if has_update {
+                                        info!("{}", rust_i18n::t!("notifications.update.available"));
+                                        update_checker::open_releases_page();
+                                    } else {
+                                        info!("{}", rust_i18n::t!("notifications.update.up_to_date"));
+                                    }
+                                }
+                                Err(e) => {
+                                    log::warn!("Failed to check for updates: {}", e);
+                                    log::warn!("{}", rust_i18n::t!("notifications.update.check_failed"));
+                                }
+                            }
+                        });
                     } else if event.id == quit_id {
                         info!("Quit requested from tray menu");
                         std::process::exit(0);

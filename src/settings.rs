@@ -170,8 +170,8 @@ impl Default for Settings {
             auto_convert_webp: false,
             conversion_format: ConversionFormat::WebP,
             webp_quality: 85,
-            window_width: 850.0,
-            window_height: 650.0,
+            window_width: 815.0,
+            window_height: 550.0,
             hotkey_enabled: true,
             hotkey: "Ctrl+Shift+S".to_string(),
             organizer_enabled: false,
@@ -286,8 +286,8 @@ mod tests {
         assert_eq!(settings.auto_convert_webp, false);
         assert_eq!(settings.conversion_format, ConversionFormat::WebP);
         assert_eq!(settings.webp_quality, 85);
-        assert_eq!(settings.window_width, 850.0);
-        assert_eq!(settings.window_height, 650.0);
+        assert_eq!(settings.window_width, 815.0);
+        assert_eq!(settings.window_height, 550.0);
         assert_eq!(settings.hotkey_enabled, true);
         assert_eq!(settings.hotkey, "Ctrl+Shift+S");
         assert_eq!(settings.organizer_enabled, false);

@@ -34,6 +34,7 @@ tray:
   tooltip: "Sukusho - 스크린샷 관리자"
   menu:
     settings: "설정"
+    check_for_updates: "업데이트 확인"
     quit: "종료"
 
 # Settings Tabs
@@ -161,6 +162,7 @@ settings:
     version: "버전 %{version}"
     description: "시스템 트레이에서 실행되는 가벼운 스크린샷 관리자. 스크린샷을 빠르게 접근, 정리 및 공유할 수 있습니다."
     github_button: "GitHub"
+    check_updates_button: "업데이트 확인"
     made_with: "Made with GPUI"
 
 # Common UI Elements
@@ -195,6 +197,12 @@ notifications:
     failed: "인덱싱 실패: %{error}"
     loading_vision: "비전 모델 로딩 중"
     loading_text: "텍스트 모델 로딩 중"
+
+  update:
+    checking: "업데이트 확인 중..."
+    available: "업데이트가 있습니다! 릴리즈 페이지를 여는 중..."
+    up_to_date: "최신 버전을 사용 중입니다"
+    check_failed: "업데이트 확인 실패"
 
   error:
     generic: "오류 발생: %{message}"
