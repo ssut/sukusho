@@ -1,0 +1,164 @@
+//! Application settings and persistence
+
+use anyhow::Result;
+use directories::ProjectDirs;
+use log::info;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+
+/// Supported conversion formats
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConversionFormat {
+    WebP,
+    Jpeg,
+}
+
+impl Default for ConversionFormat {
+    fn default() -> Self {
+        ConversionFormat::WebP
+    }
+}
+
+impl ConversionFormat {
+    pub fn extension(&self) -> &'static str {
+        match self {
+            ConversionFormat::WebP => "webp",
+            ConversionFormat::Jpeg => "jpg",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ConversionFormat::WebP => "WebP",
+            ConversionFormat::Jpeg => "JPEG",
+        }
+    }
+}
+
+/// Application settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Settings {
+    /// Directory to watch for screenshots
+    pub screenshot_directory: PathBuf,
+
+    /// Number of columns in the gallery grid
+    pub grid_columns: u32,
+
+    /// Thumbnail size in pixels
+    pub thumbnail_size: u32,
+
+    /// Auto-convert new screenshots
+    pub auto_convert_webp: bool,
+
+    /// Conversion format (WebP or JPEG)
+    #[serde(default)]
+    pub conversion_format: ConversionFormat,
+
+    /// Conversion quality (0-100)
+    pub webp_quality: u32,
+
+    /// Window width
+    pub window_width: f32,
+
+    /// Window height
+    pub window_height: f32,
+
+    /// Global hotkey enabled
+    #[serde(default = "default_hotkey_enabled")]
+    pub hotkey_enabled: bool,
+
+    /// Global hotkey string (e.g., "Ctrl+Shift+S")
+    #[serde(default = "default_hotkey")]
+    pub hotkey: String,
+}
+
+fn default_hotkey_enabled() -> bool {
+    true
+}
+
+fn default_hotkey() -> String {
+    "Ctrl+Shift+S".to_string()
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            screenshot_directory: Self::default_screenshot_directory(),
+            grid_columns: 4,
+            thumbnail_size: 150,
+            auto_convert_webp: false,
+            conversion_format: ConversionFormat::WebP,
+            webp_quality: 85,
+            window_width: 850.0,
+            window_height: 650.0,
+            hotkey_enabled: true,
+            hotkey: "Ctrl+Shift+S".to_string(),
+        }
+    }
+}
+
+impl Settings {
+    /// Get the default Windows screenshot directory
+    fn default_screenshot_directory() -> PathBuf {
+        if let Some(user_dirs) = directories::UserDirs::new() {
+            if let Some(pictures) = user_dirs.picture_dir() {
+                let screenshots = pictures.join("Screenshots");
+                if screenshots.exists() {
+                    return screenshots;
+                }
+            }
+        }
+
+        dirs::home_dir()
+            .map(|h| h.join("Pictures").join("Screenshots"))
+            .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public\\Pictures\\Screenshots"))
+    }
+
+    /// Get the config file path
+    fn config_path() -> Option<PathBuf> {
+        ProjectDirs::from("com", "traybin", "Traybin")
+            .map(|dirs| dirs.config_dir().join("settings.json"))
+    }
+
+    /// Load settings from disk
+    pub fn load() -> Result<Self> {
+        let path = Self::config_path()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine config path"))?;
+
+        if !path.exists() {
+            info!("No settings file found, using defaults");
+            return Ok(Self::default());
+        }
+
+        let content = fs::read_to_string(&path)?;
+        let settings: Self = serde_json::from_str(&content)?;
+
+        info!("Loaded settings from {:?}", path);
+        Ok(settings)
+    }
+
+    /// Save settings to disk
+    pub fn save(&self) -> Result<()> {
+        let path = Self::config_path()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine config path"))?;
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let content = serde_json::to_string_pretty(self)?;
+        fs::write(&path, content)?;
+
+        info!("Saved settings to {:?}", path);
+        Ok(())
+    }
+}
+
+mod dirs {
+    use std::path::PathBuf;
+
+    pub fn home_dir() -> Option<PathBuf> {
+        directories::UserDirs::new().map(|d| d.home_dir().to_path_buf())
+    }
+}
