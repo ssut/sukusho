@@ -3,6 +3,7 @@
 use chrono::{DateTime, Datelike, Local, NaiveDate};
 use gpui::prelude::FluentBuilder;
 use gpui::*;
+use rust_i18n::t;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::ActiveTheme;
 use std::collections::HashSet;
@@ -55,10 +56,10 @@ impl DateGroup {
 
     fn label(&self) -> String {
         match self {
-            DateGroup::Today => "Today".to_string(),
-            DateGroup::Yesterday => "Yesterday".to_string(),
-            DateGroup::ThisWeek => "This Week".to_string(),
-            DateGroup::ThisMonth => "This Month".to_string(),
+            DateGroup::Today => t!("gallery.date_group.today").to_string(),
+            DateGroup::Yesterday => t!("gallery.date_group.yesterday").to_string(),
+            DateGroup::ThisWeek => t!("gallery.date_group.this_week").to_string(),
+            DateGroup::ThisMonth => t!("gallery.date_group.this_month").to_string(),
             DateGroup::Earlier(s) => s.clone(),
         }
     }
@@ -142,7 +143,7 @@ pub fn gallery(
             .child(
                 div()
                     .text_color(cx.theme().muted_foreground)
-                    .child("No screenshots found. Screenshots will appear here when added to your Screenshots folder."),
+                    .child(t!("app.empty_state").to_string()),
             )
             .into_any_element();
     }
@@ -225,7 +226,7 @@ pub fn gallery(
                 .justify_center()
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
-                .child("Loading more...")
+                .child(t!("gallery.loading_more").to_string())
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _, _, cx| {

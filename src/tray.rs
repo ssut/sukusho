@@ -3,6 +3,7 @@
 use anyhow::Result;
 use crossbeam_channel::Sender;
 use log::{debug, info};
+use rust_i18n::t;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tray_icon::{
@@ -204,8 +205,8 @@ impl TrayManager {
         info!("Creating tray icon...");
 
         let menu = Menu::new();
-        let settings_item = MenuItem::new("Settings", true, None);
-        let quit_item = MenuItem::new("Quit", true, None);
+        let settings_item = MenuItem::new(&t!("tray.menu.settings"), true, None);
+        let quit_item = MenuItem::new(&t!("tray.menu.quit"), true, None);
 
         menu.append_items(&[&settings_item, &PredefinedMenuItem::separator(), &quit_item])?;
 
@@ -213,7 +214,7 @@ impl TrayManager {
 
         let tray_icon = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
-            .with_tooltip("Sukusho - Screenshot Manager")
+            .with_tooltip(&t!("tray.tooltip"))
             .with_icon(icon)
             .with_menu_on_left_click(false)
             .build()?;

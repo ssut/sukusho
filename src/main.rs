@@ -2,11 +2,18 @@
 #![windows_subsystem = "windows"]
 #![recursion_limit = "256"]
 
+#[macro_use]
+extern crate rust_i18n;
+
+// Initialize i18n with fallback to English
+i18n!("locales", fallback = "en");
+
 mod app;
 mod clipboard;
 mod convert;
 mod drag_drop;
 mod hotkey;
+mod i18n_helpers;
 mod indexer;
 mod organizer;
 mod settings;
@@ -96,6 +103,8 @@ pub enum AppMessage {
     SearchQuery(String),
     /// Search results returned
     SearchResults(Vec<PathBuf>),
+    /// Files copied to clipboard (count)
+    CopiedToClipboard(usize),
     /// Quit application
     Quit,
 }
@@ -164,6 +173,10 @@ fn main() -> Result<()> {
 
     // Load settings
     let settings = Settings::load().unwrap_or_default();
+
+    // Initialize language from settings or system locale
+    i18n_helpers::init_language(&settings);
+
     let screenshot_dir = settings.screenshot_directory.clone();
     let window_width = settings.window_width;
     let window_height = settings.window_height;

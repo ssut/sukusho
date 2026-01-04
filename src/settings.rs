@@ -95,6 +95,10 @@ pub struct Settings {
     /// Last indexed image count (for stats display)
     #[serde(default)]
     pub last_indexed_count: usize,
+
+    /// User-selected language (None = auto-detect from system)
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 fn default_hotkey_enabled() -> bool {
@@ -132,6 +136,7 @@ impl Default for Settings {
             indexing_cpu_mode: "normal".to_string(),
             models_downloaded: false,
             last_indexed_count: 0,
+            language: None, // Auto-detect from system
         }
     }
 }

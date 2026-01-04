@@ -1,0 +1,183 @@
+_version: 1
+
+# Main Application (src/app.rs)
+app:
+  header:
+    title: "スクリーンショット"
+    counter: "%{visible} / %{total}"
+    selected: "%{count}個選択中"
+
+  search:
+    placeholder: "画像を検索... (例: \"猫\", \"夕焼け\", \"コード\")"
+    clear_button: "クリア"
+
+  empty_state: "スクリーンショットがありません。スクリーンショットフォルダに追加すると、ここに表示されます。"
+
+  icons:
+    back: "←"
+    settings: "⚙"
+    minimize: "—"
+    checkmark: "✓"
+
+# Gallery (src/ui/gallery.rs)
+gallery:
+  date_group:
+    today: "今日"
+    yesterday: "昨日"
+    this_week: "今週"
+    this_month: "今月"
+
+  loading_more: "読み込み中..."
+
+# Tray Menu (src/tray.rs)
+tray:
+  tooltip: "Sukusho - スクリーンショットマネージャー"
+  menu:
+    settings: "設定"
+    quit: "終了"
+
+# Settings Tabs
+settings:
+  tabs:
+    general: "一般"
+    conversion: "変換"
+    indexing: "インデックス"
+    hotkey: "ホットキー"
+    about: "について"
+
+  # General Settings
+  general:
+    screenshot_dir:
+      title: "スクリーンショットディレクトリ"
+
+    language:
+      title: "言語"
+      label: "表示言語"
+      desc: "お好みの言語を選択"
+
+    organizer:
+      title: "スクリーンショット整理"
+      enable_label: "自動整理"
+      enable_desc: "新しいスクリーンショットを日付ベースのフォルダに自動的に移動"
+      format_label: "フォルダ形式"
+      format_preview: "プレビュー: %{preview}"
+      format_ymd: "YYYY-MM-DD"
+      format_ym: "YYYY-MM"
+      format_ymd_slash: "YYYY/MM/DD"
+
+      progress:
+        preparing: "準備中..."
+        status: "%{current}/%{total} ファイル"
+
+    display:
+      title: "表示"
+      thumbnail_size_label: "サムネイルサイズ"
+      thumbnail_size_desc: "サムネイルのサイズ (ピクセル、80-300)"
+      thumbnail_size_value: "%{size}px"
+
+  # Conversion Settings
+  conversion:
+    auto_convert:
+      title: "自動変換"
+      enable_label: "スクリーンショットを自動変換"
+      enable_desc: "新しいPNGスクリーンショットをWebP/JPEGに自動変換"
+
+    format:
+      label: "変換形式"
+      desc: "変換先の形式"
+      webp: "WebP"
+      jpeg: "JPEG"
+
+    quality:
+      label: "品質"
+      desc: "画像品質 (1-100、高いほど良い)"
+
+    progress:
+      preparing: "準備中..."
+      status: "%{current}/%{total} ファイル"
+
+  # Indexing Settings
+  indexing:
+    title: "画像インデックスと検索 (実験的)"
+    enable_label: "画像インデックスを有効化"
+    enable_desc: "AIベースのセマンティック検索 (例: \"猫\", \"夕焼け\", \"コード\")。モデルダウンロード後、インターネット接続なしでローカルで実行されます。"
+
+    model_status:
+      title: "モデルステータス"
+      loading: "モデル読み込み中... (%{current}/%{total})"
+      loading_percent: "%{percent}%"
+      online: "✓ モデルオンライン"
+      ready: "✓ モデル準備完了"
+
+    settings_title: "設定"
+    cpu_mode:
+      label: "CPUモード"
+      desc: "通常: バランス、高速: 最大パフォーマンス"
+      normal: "通常"
+      fast: "高速"
+
+    index_status:
+      title: "インデックス状態"
+      count: "%{count}枚の画像がインデックス済み"
+      button: "新しいファイルをインデックス"
+
+    progress:
+      title: "インデックス進行状況"
+      status_text: "画像をインデックス中..."
+      status: "%{current}/%{total} 画像"
+
+  # Hotkey Settings
+  hotkey:
+    title: "グローバルホットキー"
+    enable_label: "グローバルホットキーを有効化"
+    enable_desc: "ホットキーを押してウィンドウを表示/非表示"
+
+    current_label: "現在のホットキー"
+    recording: "キーを押してください..."
+    record_button: "記録"
+    cancel_button: "キャンセル"
+
+    examples: "例: Ctrl+Shift+S, Ctrl+Alt+S, F12"
+
+  # About
+  about:
+    version: "バージョン %{version}"
+    description: "システムトレイで動作する軽量なスクリーンショットマネージャー。スクリーンショットに素早くアクセスし、整理、共有できます。"
+    github_button: "GitHub"
+    made_with: "Made with GPUI"
+
+# Common UI Elements
+common:
+  button:
+    browse: "参照..."
+    clear: "クリア"
+    record: "記録"
+    cancel: "キャンセル"
+    github: "GitHub"
+    ok: "OK"
+    save: "保存"
+    close: "閉じる"
+
+  action:
+    copied: "コピーしました"
+    saved: "保存しました"
+    deleted: "削除しました"
+    failed: "失敗"
+
+# Notifications
+notifications:
+  copied_to_clipboard:
+    one: "1個のアイテムをクリップボードにコピーしました"
+    other: "%{count}個のアイテムをクリップボードにコピーしました"
+
+  models:
+    download_success: "検索モデルのダウンロードに成功しました"
+    download_failed: "モデルのダウンロードに失敗: %{error}"
+
+  indexing:
+    failed: "インデックスに失敗: %{error}"
+    loading_vision: "ビジョンモデル読み込み中"
+    loading_text: "テキストモデル読み込み中"
+
+  error:
+    generic: "エラーが発生しました: %{message}"

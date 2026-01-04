@@ -1,0 +1,183 @@
+_version: 1
+
+# Main Application (src/app.rs)
+app:
+  header:
+    title: "Screenshots"
+    counter: "%{visible} / %{total}"
+    selected: "%{count} selected"
+
+  search:
+    placeholder: "Search images... (e.g., \"cat\", \"sunset\", \"code\")"
+    clear_button: "Clear"
+
+  empty_state: "No screenshots found. Screenshots will appear here when added to your Screenshots folder."
+
+  icons:
+    back: "←"
+    settings: "⚙"
+    minimize: "—"
+    checkmark: "✓"
+
+# Gallery (src/ui/gallery.rs)
+gallery:
+  date_group:
+    today: "Today"
+    yesterday: "Yesterday"
+    this_week: "This Week"
+    this_month: "This Month"
+
+  loading_more: "Loading more..."
+
+# Tray Menu (src/tray.rs)
+tray:
+  tooltip: "Sukusho - Screenshot Manager"
+  menu:
+    settings: "Settings"
+    quit: "Quit"
+
+# Settings Tabs
+settings:
+  tabs:
+    general: "General"
+    conversion: "Conversion"
+    indexing: "Indexing"
+    hotkey: "Hotkey"
+    about: "About"
+
+  # General Settings
+  general:
+    screenshot_dir:
+      title: "Screenshot Directory"
+
+    language:
+      title: "Language"
+      label: "Display Language"
+      desc: "Choose your preferred language"
+
+    organizer:
+      title: "Screenshot Organizer"
+      enable_label: "Auto-organize Screenshots"
+      enable_desc: "Automatically move new screenshots to date-based folders"
+      format_label: "Folder Format"
+      format_preview: "Preview: %{preview}"
+      format_ymd: "YYYY-MM-DD"
+      format_ym: "YYYY-MM"
+      format_ymd_slash: "YYYY/MM/DD"
+
+      progress:
+        preparing: "Preparing..."
+        status: "%{current}/%{total} files"
+
+    display:
+      title: "Display"
+      thumbnail_size_label: "Thumbnail Size"
+      thumbnail_size_desc: "Size of thumbnails in pixels (80-300)"
+      thumbnail_size_value: "%{size}px"
+
+  # Conversion Settings
+  conversion:
+    auto_convert:
+      title: "Auto Conversion"
+      enable_label: "Auto-convert Screenshots"
+      enable_desc: "Automatically convert new PNG screenshots to WebP/JPEG"
+
+    format:
+      label: "Conversion Format"
+      desc: "Target format for conversion"
+      webp: "WebP"
+      jpeg: "JPEG"
+
+    quality:
+      label: "Quality"
+      desc: "Image quality (1-100, higher is better)"
+
+    progress:
+      preparing: "Preparing..."
+      status: "%{current}/%{total} files"
+
+  # Indexing Settings
+  indexing:
+    title: "Image Indexing & Search (Experimental)"
+    enable_label: "Enable Image Indexing"
+    enable_desc: "AI-powered semantic search (e.g., \"cat\", \"sunset\", \"code\"). Runs locally on your machine - no internet connection needed after model download."
+
+    model_status:
+      title: "Model Status"
+      loading: "Loading models... (%{current}/%{total})"
+      loading_percent: "%{percent}%"
+      online: "✓ Models Online"
+      ready: "✓ Models Ready"
+
+    settings_title: "Settings"
+    cpu_mode:
+      label: "CPU Mode"
+      desc: "Normal: balanced, Fast: max performance"
+      normal: "Normal"
+      fast: "Fast"
+
+    index_status:
+      title: "Index Status"
+      count: "%{count} images indexed"
+      button: "Index New Files"
+
+    progress:
+      title: "Indexing Progress"
+      status_text: "Indexing images..."
+      status: "%{current}/%{total} images"
+
+  # Hotkey Settings
+  hotkey:
+    title: "Global Hotkey"
+    enable_label: "Enable Global Hotkey"
+    enable_desc: "Press hotkey to show/hide window"
+
+    current_label: "Current Hotkey"
+    recording: "Press any key..."
+    record_button: "Record"
+    cancel_button: "Cancel"
+
+    examples: "Examples: Ctrl+Shift+S, Ctrl+Alt+S, F12"
+
+  # About
+  about:
+    version: "Version %{version}"
+    description: "A lightweight screenshot manager that lives in your system tray. Quickly access, organize, and share your screenshots."
+    github_button: "GitHub"
+    made_with: "Made with GPUI"
+
+# Common UI Elements
+common:
+  button:
+    browse: "Browse..."
+    clear: "Clear"
+    record: "Record"
+    cancel: "Cancel"
+    github: "GitHub"
+    ok: "OK"
+    save: "Save"
+    close: "Close"
+
+  action:
+    copied: "Copied"
+    saved: "Saved"
+    deleted: "Deleted"
+    failed: "Failed"
+
+# Notifications
+notifications:
+  copied_to_clipboard:
+    one: "1 item copied to clipboard"
+    other: "%{count} items copied to clipboard"
+
+  models:
+    download_success: "Search models downloaded successfully"
+    download_failed: "Model download failed: %{error}"
+
+  indexing:
+    failed: "Indexing failed: %{error}"
+    loading_vision: "Loading Vision Model"
+    loading_text: "Loading Text Model"
+
+  error:
+    generic: "An error occurred: %{message}"

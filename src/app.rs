@@ -9,6 +9,7 @@ use gpui_component::notification::{Notification, NotificationType};
 use gpui_component::switch::Switch;
 use gpui_component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
 use log::{error, info};
+use rust_i18n::t;
 use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -296,7 +297,7 @@ impl Sukusho {
         // Create search input state
         let search_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Search images... (e.g., \"cat\", \"sunset\", \"code\")")
+                .placeholder(&t!("app.search.placeholder").to_string())
         });
 
         // Subscribe to search input events
@@ -690,7 +691,7 @@ impl Sukusho {
                     // Show notification
                     window.push_notification(
                         Notification::new()
-                            .message("Search models downloaded successfully")
+                            .message(&t!("notifications.models.download_success").to_string())
                             .with_type(NotificationType::Success),
                         cx,
                     );
@@ -712,7 +713,7 @@ impl Sukusho {
                     // Show error notification
                     window.push_notification(
                         Notification::new()
-                            .message(format!("Model download failed: {}", error))
+                            .message(&t!("notifications.models.download_failed", error = error).to_string())
                             .with_type(NotificationType::Error),
                         cx,
                     );
@@ -790,7 +791,7 @@ impl Sukusho {
                     // Show error notification
                     window.push_notification(
                         Notification::new()
-                            .message(format!("Indexing failed: {}", error))
+                            .message(&t!("notifications.indexing.failed", error = error).to_string())
                             .with_type(NotificationType::Error),
                         cx,
                     );
@@ -833,6 +834,22 @@ impl Sukusho {
                 AppMessage::SearchResults(paths) => {
                     info!("Search results: {} images", paths.len());
                     self.search_results = if paths.is_empty() { None } else { Some(paths) };
+                    cx.notify();
+                }
+                AppMessage::CopiedToClipboard(count) => {
+                    info!("Showing clipboard notification for {} items", count);
+                    // Show toast notification
+                    let message = if count == 1 {
+                        t!("notifications.copied_to_clipboard.one").to_string()
+                    } else {
+                        t!("notifications.copied_to_clipboard.other", count = count).to_string()
+                    };
+                    window.push_notification(
+                        Notification::new()
+                            .message(&message)
+                            .with_type(NotificationType::Success),
+                        cx,
+                    );
                     cx.notify();
                 }
             }
@@ -1222,21 +1239,17 @@ impl Render for Sukusho {
                         if !this.selected.is_empty() {
                             let files: Vec<_> = this.selected.iter().cloned().collect();
                             let count = files.len();
+                            info!("Attempting to copy {} files to clipboard", count);
                             if clipboard::copy_files_to_clipboard(&files) {
-                                info!("Copied {} files to clipboard", count);
-                                // Show toast notification
-                                let message = if count == 1 {
-                                    "1 item copied to clipboard".to_string()
-                                } else {
-                                    format!("{} items copied to clipboard", count)
-                                };
-                                window.push_notification(
-                                    Notification::new()
-                                        .message(message)
-                                        .with_type(NotificationType::Success),
-                                    cx,
-                                );
+                                info!("Successfully copied {} files to clipboard", count);
+                                // Send message to show notification (will be handled in process_messages)
+                                let app_state = cx.global::<AppState>();
+                                let _ = app_state.message_tx.send(AppMessage::CopiedToClipboard(count));
+                            } else {
+                                error!("Failed to copy files to clipboard");
                             }
+                        } else {
+                            info!("No files selected for clipboard copy");
                         }
                     }
                     // Ctrl+A - select all visible
@@ -1304,7 +1317,7 @@ impl Render for Sukusho {
                                             .text_lg()
                                             .font_weight(FontWeight::BOLD)
                                             .text_color(cx.theme().foreground)
-                                            .child("Screenshots"),
+                                            .child(t!("app.header.title").to_string()),
                                     )
                                     .child(
                                         div()
@@ -1314,7 +1327,7 @@ impl Render for Sukusho {
                                             .bg(cx.theme().muted)
                                             .text_xs()
                                             .text_color(cx.theme().muted_foreground)
-                                            .child(format!("{} / {}", visible_count, total_count)),
+                                            .child(t!("app.header.counter", visible = visible_count, total = total_count).to_string()),
                                     )
                                     .when(selected_count > 0, |this| {
                                         this.child(
@@ -1326,7 +1339,7 @@ impl Render for Sukusho {
                                                 .text_xs()
                                                 .font_weight(FontWeight::MEDIUM)
                                                 .text_color(cx.theme().primary_foreground)
-                                                .child(format!("{} selected", selected_count)),
+                                                .child(t!("app.header.selected", count = selected_count).to_string()),
                                         )
                                     }),
                             )
@@ -1425,7 +1438,7 @@ impl Sukusho {
                                         Button::new("clear-search")
                                             .small()
                                             .ghost()
-                                            .label("Clear")
+                                            .label(&t!("app.search.clear_button").to_string())
                                             .on_click(cx.listener(|this, _, window, cx| {
                                                 this.search_input.update(cx, |input, cx| {
                                                     input.set_value("", window, cx);
@@ -1457,6 +1470,13 @@ impl Sukusho {
         let settings = app_state.settings.lock().clone();
         let current_page = self.settings_page;
 
+        // Pre-compute tab labels to avoid temporary value issues
+        let tab_general = t!("settings.tabs.general").to_string();
+        let tab_conversion = t!("settings.tabs.conversion").to_string();
+        let tab_indexing = t!("settings.tabs.indexing").to_string();
+        let tab_hotkey = t!("settings.tabs.hotkey").to_string();
+        let tab_about = t!("settings.tabs.about").to_string();
+
         h_flex()
             .size_full()
             // Sidebar
@@ -1473,31 +1493,31 @@ impl Sukusho {
                     .border_color(cx.theme().border)
                     .bg(cx.theme().background)
                     .child(self.render_settings_tab(
-                        "General",
+                        &tab_general,
                         SettingsPage::General,
                         current_page,
                         cx,
                     ))
                     .child(self.render_settings_tab(
-                        "Conversion",
+                        &tab_conversion,
                         SettingsPage::Conversion,
                         current_page,
                         cx,
                     ))
                     .child(self.render_settings_tab(
-                        "Indexing",
+                        &tab_indexing,
                         SettingsPage::Indexing,
                         current_page,
                         cx,
                     ))
                     .child(self.render_settings_tab(
-                        "Hotkey",
+                        &tab_hotkey,
                         SettingsPage::Hotkey,
                         current_page,
                         cx,
                     ))
                     .child(self.render_settings_tab(
-                        "About",
+                        &tab_about,
                         SettingsPage::About,
                         current_page,
                         cx,
@@ -1531,14 +1551,15 @@ impl Sukusho {
 
     fn render_settings_tab(
         &self,
-        label: &'static str,
+        label: &str,
         page: SettingsPage,
         current: SettingsPage,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let is_active = page == current;
+        let tab_id = format!("tab-{}", label.to_lowercase());
         div()
-            .id(SharedString::from(format!("tab-{}", label.to_lowercase())))
+            .id(SharedString::from(tab_id))
             .w_full()
             .px_3()
             .py_2()
@@ -1559,7 +1580,7 @@ impl Sukusho {
                 this.settings_page = page;
                 cx.notify();
             }))
-            .child(label)
+            .child(label.to_string())
     }
 
     fn render_setting_row(
@@ -1621,11 +1642,86 @@ impl Sukusho {
         let organize_progress = self.organize_progress;
         let organize_current_file = self.organize_current_file.clone();
 
+        // Pre-compute strings to avoid temporary value issues
+        let language_title = t!("settings.general.language.title").to_string();
+        let language_label = t!("settings.general.language.label").to_string();
+        let language_desc = t!("settings.general.language.desc").to_string();
+        let screenshot_dir_title = t!("settings.general.screenshot_dir.title").to_string();
+        let browse_label = t!("common.button.browse").to_string();
+        let organizer_title = t!("settings.general.organizer.title").to_string();
+        let organizer_enable_label = t!("settings.general.organizer.enable_label").to_string();
+        let organizer_enable_desc = t!("settings.general.organizer.enable_desc").to_string();
+
+        // Get current language
+        let current_lang = crate::i18n_helpers::current_language();
+
         v_flex()
             .w_full()
             .gap_2()
+            // Language
+            .child(self.render_section_header(&language_title, cx))
+            .child(
+                self.render_setting_row(
+                    &language_label,
+                    Some(&language_desc),
+                    h_flex()
+                        .gap_1()
+                        .child(
+                            Button::new("lang-en")
+                                .small()
+                                .when(current_lang == "en", |b| b.primary())
+                                .when(current_lang != "en", |b| b.outline())
+                                .label("English")
+                                .on_click(cx.listener(|_this, _, _, cx| {
+                                    crate::i18n_helpers::change_language("en");
+                                    {
+                                        let app_state = cx.global::<AppState>();
+                                        let mut settings = app_state.settings.lock();
+                                        settings.language = Some("en".to_string());
+                                        let _ = settings.save();
+                                    }
+                                    cx.notify();
+                                }))
+                        )
+                        .child(
+                            Button::new("lang-ko")
+                                .small()
+                                .when(current_lang == "ko", |b| b.primary())
+                                .when(current_lang != "ko", |b| b.outline())
+                                .label("한국어")
+                                .on_click(cx.listener(|_this, _, _, cx| {
+                                    crate::i18n_helpers::change_language("ko");
+                                    {
+                                        let app_state = cx.global::<AppState>();
+                                        let mut settings = app_state.settings.lock();
+                                        settings.language = Some("ko".to_string());
+                                        let _ = settings.save();
+                                    }
+                                    cx.notify();
+                                }))
+                        )
+                        .child(
+                            Button::new("lang-ja")
+                                .small()
+                                .when(current_lang == "ja", |b| b.primary())
+                                .when(current_lang != "ja", |b| b.outline())
+                                .label("日本語")
+                                .on_click(cx.listener(|_this, _, _, cx| {
+                                    crate::i18n_helpers::change_language("ja");
+                                    {
+                                        let app_state = cx.global::<AppState>();
+                                        let mut settings = app_state.settings.lock();
+                                        settings.language = Some("ja".to_string());
+                                        let _ = settings.save();
+                                    }
+                                    cx.notify();
+                                })),
+                        ),
+                    cx,
+                )
+            )
             // Screenshot Directory
-            .child(self.render_section_header("Screenshot Directory", cx))
+            .child(self.render_section_header(&screenshot_dir_title, cx))
             .child(
                 h_flex()
                     .w_full()
@@ -1646,7 +1742,7 @@ impl Sukusho {
                     )
                     .child(
                         Button::new("browse-dir")
-                            .label("Browse...")
+                            .label(&browse_label)
                             .small()
                             .outline()
                             .on_click(|_, _, cx| {
@@ -1663,14 +1759,14 @@ impl Sukusho {
                     ),
             )
             // Screenshot Organizer
-            .child(self.render_section_header("Screenshot Organizer", cx))
+            .child(self.render_section_header(&organizer_title, cx))
             .child(
                 self.render_setting_row(
-                    "Auto-organize Screenshots",
+                    &organizer_enable_label,
                     if organizing {
                         None
                     } else {
-                        Some("Automatically move new screenshots to date-based folders")
+                        Some(&organizer_enable_desc)
                     },
                     Switch::new("organizer-enable")
                         .checked(organizer_enabled)
@@ -1743,7 +1839,7 @@ impl Sukusho {
                                         .max_w(px(200.0))
                                         .overflow_x_hidden()
                                         .child(if organize_current_file.is_empty() {
-                                            "Preparing...".to_string()
+                                            t!("settings.general.organizer.progress.preparing").to_string()
                                         } else {
                                             organize_current_file
                                         }),
@@ -1752,7 +1848,7 @@ impl Sukusho {
                                     div()
                                         .text_xs()
                                         .text_color(cx.theme().muted_foreground)
-                                        .child(format!("{}/{} files", current, total)),
+                                        .child(t!("settings.general.organizer.progress.status", current = current, total = total).to_string()),
                                 ),
                         ),
                 )
@@ -1772,7 +1868,7 @@ impl Sukusho {
                                     .text_sm()
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(cx.theme().foreground)
-                                    .child("Folder Format"),
+                                    .child(t!("settings.general.organizer.format_label").to_string()),
                             )
                             .child(
                                 h_flex()
@@ -1782,7 +1878,7 @@ impl Sukusho {
                                             .small()
                                             .when(organizer_format == "YYYY-MM-DD", |s| s.primary())
                                             .when(organizer_format != "YYYY-MM-DD", |s| s.outline())
-                                            .label("YYYY-MM-DD")
+                                            .label(&t!("settings.general.organizer.format_ymd").to_string())
                                             .on_click(cx.listener(|_this, _, _, cx| {
                                                 {
                                                     let app_state = cx.global::<AppState>();
@@ -1799,7 +1895,7 @@ impl Sukusho {
                                             .small()
                                             .when(organizer_format == "YYYY-MM", |s| s.primary())
                                             .when(organizer_format != "YYYY-MM", |s| s.outline())
-                                            .label("YYYY-MM")
+                                            .label(&t!("settings.general.organizer.format_ym").to_string())
                                             .on_click(cx.listener(|_this, _, _, cx| {
                                                 {
                                                     let app_state = cx.global::<AppState>();
@@ -1816,7 +1912,7 @@ impl Sukusho {
                                             .small()
                                             .when(organizer_format == "YYYY/MM/DD", |s| s.primary())
                                             .when(organizer_format != "YYYY/MM/DD", |s| s.outline())
-                                            .label("YYYY/MM/DD")
+                                            .label(&t!("settings.general.organizer.format_ymd_slash").to_string())
                                             .on_click(cx.listener(|_this, _, _, cx| {
                                                 {
                                                     let app_state = cx.global::<AppState>();
@@ -1834,15 +1930,15 @@ impl Sukusho {
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child(format!("Preview: {}", format_preview)),
+                            .child(t!("settings.general.organizer.format_preview", preview = format_preview).to_string()),
                     ),
             )
             // Display Settings
-            .child(self.render_section_header("Display", cx))
+            .child(self.render_section_header(&t!("settings.general.display.title").to_string(), cx))
             .child(
                 self.render_setting_row(
-                    "Thumbnail Size",
-                    Some("Size of thumbnails in pixels (80-300)"),
+                    &t!("settings.general.display.thumbnail_size_label").to_string(),
+                    Some(&t!("settings.general.display.thumbnail_size_desc").to_string()),
                     h_flex()
                         .gap_2()
                         .items_center()
@@ -1872,7 +1968,7 @@ impl Sukusho {
                                 .rounded(px(4.0))
                                 .bg(cx.theme().muted)
                                 .text_sm()
-                                .child(format!("{}px", thumbnail_size)),
+                                .child(t!("settings.general.display.thumbnail_size_value", size = thumbnail_size).to_string()),
                         )
                         .child(
                             Button::new("thumb-plus")
@@ -1911,12 +2007,12 @@ impl Sukusho {
         v_flex()
             .w_full()
             .gap_2()
-            .child(self.render_section_header("Auto Conversion", cx))
+            .child(self.render_section_header(&t!("settings.conversion.auto_convert.title").to_string(), cx))
             // Auto-convert toggle
             .child(
                 self.render_setting_row(
-                    "Auto-convert Screenshots",
-                    Some("Automatically convert new PNG screenshots to WebP/JPEG"),
+                    &t!("settings.conversion.auto_convert.enable_label").to_string(),
+                    Some(&t!("settings.conversion.auto_convert.enable_desc").to_string()),
                     Switch::new("auto-convert")
                         .checked(auto_convert)
                         .on_click(cx.listener(|_this, checked: &bool, _, cx| {
@@ -1934,8 +2030,8 @@ impl Sukusho {
             // Format selection
             .child(
                 self.render_setting_row(
-                    "Conversion Format",
-                    Some("Target format for conversion"),
+                    &t!("settings.conversion.format.label").to_string(),
+                    Some(&t!("settings.conversion.format.desc").to_string()),
                     h_flex()
                         .gap_1()
                         .child(
@@ -1943,7 +2039,7 @@ impl Sukusho {
                                 .small()
                                 .when(format == ConversionFormat::WebP, |s| s.primary())
                                 .when(format != ConversionFormat::WebP, |s| s.outline())
-                                .label("WebP")
+                                .label(&t!("settings.conversion.format.webp").to_string())
                                 .on_click(cx.listener(|_this, _, _, cx| {
                                     {
                                         let app_state = cx.global::<AppState>();
@@ -1959,7 +2055,7 @@ impl Sukusho {
                                 .small()
                                 .when(format == ConversionFormat::Jpeg, |s| s.primary())
                                 .when(format != ConversionFormat::Jpeg, |s| s.outline())
-                                .label("JPEG")
+                                .label(&t!("settings.conversion.format.jpeg").to_string())
                                 .on_click(cx.listener(|_this, _, _, cx| {
                                     {
                                         let app_state = cx.global::<AppState>();
@@ -1976,8 +2072,8 @@ impl Sukusho {
             // Quality
             .child(
                 self.render_setting_row(
-                    "Quality",
-                    Some("Image quality (1-100, higher is better)"),
+                    &t!("settings.conversion.quality.label").to_string(),
+                    Some(&t!("settings.conversion.quality.desc").to_string()),
                     h_flex()
                         .gap_2()
                         .items_center()
@@ -2067,7 +2163,7 @@ impl Sukusho {
                                         .max_w(px(200.0))
                                         .overflow_x_hidden()
                                         .child(if convert_current_file.is_empty() {
-                                            "Preparing...".to_string()
+                                            t!("settings.conversion.progress.preparing").to_string()
                                         } else {
                                             convert_current_file
                                         }),
@@ -2076,7 +2172,7 @@ impl Sukusho {
                                     div()
                                         .text_xs()
                                         .text_color(cx.theme().muted_foreground)
-                                        .child(format!("{}/{} files", current, total)),
+                                        .child(t!("settings.conversion.progress.status", current = current, total = total).to_string()),
                                 ),
                         ),
                 )
@@ -2092,18 +2188,23 @@ impl Sukusho {
         let cpu_mode = settings.indexing_cpu_mode.clone();
         let indexed_count = settings.last_indexed_count;
 
+        // Pre-compute strings to avoid temporary value issues
+        let indexing_title = t!("settings.indexing.title").to_string();
+        let indexing_enable_label = t!("settings.indexing.enable_label").to_string();
+        let indexing_enable_desc = t!("settings.indexing.enable_desc").to_string();
+
         v_flex()
             .w_full()
             .gap_2()
             // Enable Image Indexing toggle
-            .child(self.render_section_header("Image Indexing & Search (Experimental)", cx))
+            .child(self.render_section_header(&indexing_title, cx))
             .child(
                 self.render_setting_row(
-                    "Enable Image Indexing",
+                    &indexing_enable_label,
                     if self.downloading_models || self.indexing {
                         None
                     } else {
-                        Some("AI-powered semantic search (e.g., \"cat\", \"sunset\", \"code\"). Runs locally on your machine - no internet connection needed after model download.")
+                        Some(&indexing_enable_desc)
                     },
                     Switch::new("indexing-enable")
                         .checked(indexing_enabled)
@@ -2169,13 +2270,13 @@ impl Sukusho {
                                     .text_xs()
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(cx.theme().foreground)
-                                    .child("Model Status"),
+                                    .child(t!("settings.indexing.model_status.title").to_string()),
                             )
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(format!("Loading models... ({}/{})", current, total)),
+                                    .child(t!("settings.indexing.model_status.loading", current = current, total = total).to_string()),
                             )
                             .child(
                                 div()
@@ -2196,7 +2297,7 @@ impl Sukusho {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(format!("{}%", progress_pct as u32)),
+                                    .child(t!("settings.indexing.model_status.loading_percent", percent = progress_pct as u32).to_string()),
                             )
                     )
                 } else {
@@ -2210,27 +2311,27 @@ impl Sukusho {
                                     .text_xs()
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(cx.theme().foreground)
-                                    .child("Model Status"),
+                                    .child(t!("settings.indexing.model_status.title").to_string()),
                             )
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
                                     .child(if PREWARMED_TEXT_MODEL.lock().is_some() && PREWARMED_VISION_MODEL.lock().is_some() {
-                                        "✓ Models Online"
+                                        t!("settings.indexing.model_status.online").to_string()
                                     } else {
-                                        "✓ Models Ready"
+                                        t!("settings.indexing.model_status.ready").to_string()
                                     }),
                             )
                     )
                 }
             })
             // CPU Mode selection (always show, but disable when off or busy)
-            .child(self.render_section_header("Settings", cx))
+            .child(self.render_section_header(&t!("settings.indexing.settings_title").to_string(), cx))
             .child(
                 self.render_setting_row(
-                    "CPU Mode",
-                    Some("Normal: balanced, Fast: max performance"),
+                    &t!("settings.indexing.cpu_mode.label").to_string(),
+                    Some(&t!("settings.indexing.cpu_mode.desc").to_string()),
                     h_flex()
                         .gap_2()
                         .child(
@@ -2238,7 +2339,7 @@ impl Sukusho {
                                 .small()
                                 .when(cpu_mode == "normal", |s| s.primary())
                                 .when(cpu_mode != "normal", |s| s.outline())
-                                .label("Normal")
+                                .label(&t!("settings.indexing.cpu_mode.normal").to_string())
                                 .disabled(!indexing_enabled || self.downloading_models || self.indexing)
                                 .on_click(cx.listener(|_this, _, _, cx| {
                                     {
@@ -2255,7 +2356,7 @@ impl Sukusho {
                                 .small()
                                 .when(cpu_mode == "fast", |s| s.primary())
                                 .when(cpu_mode != "fast", |s| s.outline())
-                                .label("Fast")
+                                .label(&t!("settings.indexing.cpu_mode.fast").to_string())
                                 .disabled(!indexing_enabled || self.downloading_models || self.indexing)
                                 .on_click(cx.listener(|_this, _, _, cx| {
                                     {
@@ -2278,7 +2379,7 @@ impl Sukusho {
                 } else {
                     0.0
                 };
-                el.child(self.render_section_header("Indexing Progress", cx))
+                el.child(self.render_section_header(&t!("settings.indexing.progress.title").to_string(), cx))
                     .child(
                         v_flex()
                             .w_full()
@@ -2310,7 +2411,7 @@ impl Sukusho {
                                             .max_w(px(200.0))
                                             .overflow_x_hidden()
                                             .child(if self.index_current_file.is_empty() {
-                                                "Indexing images...".to_string()
+                                                t!("settings.indexing.progress.status_text").to_string()
                                             } else {
                                                 self.index_current_file.clone()
                                             }),
@@ -2319,14 +2420,14 @@ impl Sukusho {
                                         div()
                                             .text_xs()
                                             .text_color(cx.theme().muted_foreground)
-                                            .child(format!("{}/{} images", current, total)),
+                                            .child(t!("settings.indexing.progress.status", current = current, total = total).to_string()),
                                     ),
                             ),
                     )
             })
             // Index stats and manual re-index button (always show if models downloaded, regardless of toggle)
             .when(self.models_downloaded, |el| {
-                el.child(self.render_section_header("Index Status", cx))
+                el.child(self.render_section_header(&t!("settings.indexing.index_status.title").to_string(), cx))
                     .child(
                         h_flex()
                             .w_full()
@@ -2337,13 +2438,13 @@ impl Sukusho {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(format!("{} images indexed", indexed_count)),
+                                    .child(t!("settings.indexing.index_status.count", count = indexed_count).to_string()),
                             )
                             .child(
                                 Button::new("index-new-button")
                                     .small()
                                     .outline()
-                                    .label("Index New Files")
+                                    .label(&t!("settings.indexing.index_status.button").to_string())
                                     .disabled(!indexing_enabled || self.indexing || self.downloading_models)
                                     .on_click(cx.listener(|_this, _, _, cx| {
                                         let tx = {
@@ -2391,12 +2492,12 @@ impl Sukusho {
         v_flex()
             .w_full()
             .gap_2()
-            .child(self.render_section_header("Global Hotkey", cx))
+            .child(self.render_section_header(&t!("settings.hotkey.title").to_string(), cx))
             // Enable toggle
             .child(
                 self.render_setting_row(
-                    "Enable Global Hotkey",
-                    Some("Press hotkey to show/hide window"),
+                    &t!("settings.hotkey.enable_label").to_string(),
+                    Some(&t!("settings.hotkey.enable_desc").to_string()),
                     Switch::new("hotkey-enable")
                         .checked(hotkey_enabled)
                         .on_click(cx.listener(|_this, checked: &bool, _, cx| {
@@ -2427,7 +2528,7 @@ impl Sukusho {
                                     .text_sm()
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(cx.theme().foreground)
-                                    .child("Current Hotkey"),
+                                    .child(t!("settings.hotkey.current_label").to_string()),
                             )
                             .child(
                                 h_flex()
@@ -2451,7 +2552,7 @@ impl Sukusho {
                                                 cx.theme().foreground
                                             })
                                             .child(if recording {
-                                                "Press any key...".to_string()
+                                                t!("settings.hotkey.recording").to_string()
                                             } else {
                                                 hotkey_str
                                             }),
@@ -2461,7 +2562,7 @@ impl Sukusho {
                                             .small()
                                             .when(recording, |s| s.danger())
                                             .when(!recording, |s| s.outline())
-                                            .label(if recording { "Cancel" } else { "Record" })
+                                            .label(&if recording { t!("settings.hotkey.cancel_button").to_string() } else { t!("settings.hotkey.record_button").to_string() })
                                             .on_click(cx.listener(|this, _, _, cx| {
                                                 this.recording_hotkey = !this.recording_hotkey;
                                                 cx.notify();
@@ -2473,7 +2574,7 @@ impl Sukusho {
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child("Examples: Ctrl+Shift+S, Ctrl+Alt+S, F12"),
+                            .child(t!("settings.hotkey.examples").to_string()),
                     ),
             )
     }
@@ -2509,7 +2610,7 @@ impl Sukusho {
                 div()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child(format!("Version {}", APP_VERSION)),
+                    .child(t!("settings.about.version", version = APP_VERSION).to_string()),
             )
             // Description
             .child(
@@ -2518,9 +2619,7 @@ impl Sukusho {
                     .text_center()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child(
-                        "A lightweight screenshot manager that lives in your system tray. Quickly access, organize, and share your screenshots.",
-                    ),
+                    .child(t!("settings.about.description").to_string()),
             )
             // Links
             .child(
@@ -2531,7 +2630,7 @@ impl Sukusho {
                         Button::new("github")
                             .outline()
                             .small()
-                            .label("GitHub")
+                            .label(&t!("settings.about.github_button").to_string())
                             .on_click(|_, _, cx| {
                                 cx.open_url("https://github.com/ssut/sukusho");
                             }),
@@ -2543,7 +2642,7 @@ impl Sukusho {
                     .mt_4()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("Made with GPUI"),
+                    .child(t!("settings.about.made_with").to_string()),
             )
     }
 }

@@ -1,0 +1,183 @@
+_version: 1
+
+# Main Application (src/app.rs)
+app:
+  header:
+    title: "스크린샷"
+    counter: "%{visible} / %{total}"
+    selected: "%{count}개 선택됨"
+
+  search:
+    placeholder: "이미지 검색... (예: \"고양이\", \"일몰\", \"코드\")"
+    clear_button: "지우기"
+
+  empty_state: "스크린샷이 없습니다. 스크린샷 폴더에 추가하면 여기에 표시됩니다."
+
+  icons:
+    back: "←"
+    settings: "⚙"
+    minimize: "—"
+    checkmark: "✓"
+
+# Gallery (src/ui/gallery.rs)
+gallery:
+  date_group:
+    today: "오늘"
+    yesterday: "어제"
+    this_week: "이번 주"
+    this_month: "이번 달"
+
+  loading_more: "더 불러오는 중..."
+
+# Tray Menu (src/tray.rs)
+tray:
+  tooltip: "Sukusho - 스크린샷 관리자"
+  menu:
+    settings: "설정"
+    quit: "종료"
+
+# Settings Tabs
+settings:
+  tabs:
+    general: "일반"
+    conversion: "변환"
+    indexing: "인덱싱"
+    hotkey: "단축키"
+    about: "정보"
+
+  # General Settings
+  general:
+    screenshot_dir:
+      title: "스크린샷 디렉토리"
+
+    language:
+      title: "언어"
+      label: "표시 언어"
+      desc: "원하는 언어를 선택하세요"
+
+    organizer:
+      title: "스크린샷 정리"
+      enable_label: "자동 정리"
+      enable_desc: "새 스크린샷을 날짜별 폴더로 자동 이동"
+      format_label: "폴더 형식"
+      format_preview: "미리보기: %{preview}"
+      format_ymd: "YYYY-MM-DD"
+      format_ym: "YYYY-MM"
+      format_ymd_slash: "YYYY/MM/DD"
+
+      progress:
+        preparing: "준비 중..."
+        status: "%{current}/%{total} 파일"
+
+    display:
+      title: "표시"
+      thumbnail_size_label: "썸네일 크기"
+      thumbnail_size_desc: "썸네일 크기 (픽셀, 80-300)"
+      thumbnail_size_value: "%{size}px"
+
+  # Conversion Settings
+  conversion:
+    auto_convert:
+      title: "자동 변환"
+      enable_label: "스크린샷 자동 변환"
+      enable_desc: "새 PNG 스크린샷을 WebP/JPEG로 자동 변환"
+
+    format:
+      label: "변환 형식"
+      desc: "변환할 대상 형식"
+      webp: "WebP"
+      jpeg: "JPEG"
+
+    quality:
+      label: "품질"
+      desc: "이미지 품질 (1-100, 높을수록 좋음)"
+
+    progress:
+      preparing: "준비 중..."
+      status: "%{current}/%{total} 파일"
+
+  # Indexing Settings
+  indexing:
+    title: "이미지 인덱싱 & 검색 (실험적)"
+    enable_label: "이미지 인덱싱 활성화"
+    enable_desc: "AI 기반 의미 검색 (예: \"고양이\", \"일몰\", \"코드\"). 모델 다운로드 후 인터넷 연결 없이 로컬에서 실행됩니다."
+
+    model_status:
+      title: "모델 상태"
+      loading: "모델 로딩 중... (%{current}/%{total})"
+      loading_percent: "%{percent}%"
+      online: "✓ 모델 온라인"
+      ready: "✓ 모델 준비됨"
+
+    settings_title: "설정"
+    cpu_mode:
+      label: "CPU 모드"
+      desc: "일반: 균형, 빠름: 최대 성능"
+      normal: "일반"
+      fast: "빠름"
+
+    index_status:
+      title: "인덱스 상태"
+      count: "%{count}개 이미지 인덱싱됨"
+      button: "새 파일 인덱싱"
+
+    progress:
+      title: "인덱싱 진행률"
+      status_text: "이미지 인덱싱 중..."
+      status: "%{current}/%{total} 이미지"
+
+  # Hotkey Settings
+  hotkey:
+    title: "전역 단축키"
+    enable_label: "전역 단축키 활성화"
+    enable_desc: "단축키를 눌러 창 표시/숨기기"
+
+    current_label: "현재 단축키"
+    recording: "키를 눌러주세요..."
+    record_button: "기록"
+    cancel_button: "취소"
+
+    examples: "예시: Ctrl+Shift+S, Ctrl+Alt+S, F12"
+
+  # About
+  about:
+    version: "버전 %{version}"
+    description: "시스템 트레이에서 실행되는 가벼운 스크린샷 관리자. 스크린샷을 빠르게 접근, 정리 및 공유할 수 있습니다."
+    github_button: "GitHub"
+    made_with: "Made with GPUI"
+
+# Common UI Elements
+common:
+  button:
+    browse: "찾아보기..."
+    clear: "지우기"
+    record: "기록"
+    cancel: "취소"
+    github: "GitHub"
+    ok: "확인"
+    save: "저장"
+    close: "닫기"
+
+  action:
+    copied: "복사됨"
+    saved: "저장됨"
+    deleted: "삭제됨"
+    failed: "실패"
+
+# Notifications
+notifications:
+  copied_to_clipboard:
+    one: "1개 항목이 클립보드에 복사되었습니다"
+    other: "%{count}개 항목이 클립보드에 복사되었습니다"
+
+  models:
+    download_success: "검색 모델이 성공적으로 다운로드되었습니다"
+    download_failed: "모델 다운로드 실패: %{error}"
+
+  indexing:
+    failed: "인덱싱 실패: %{error}"
+    loading_vision: "비전 모델 로딩 중"
+    loading_text: "텍스트 모델 로딩 중"
+
+  error:
+    generic: "오류 발생: %{message}"
