@@ -1,6 +1,6 @@
 # Sukusho (スクショ)
 
-A powerful screenshot manager for Windows with AI-powered semantic search. Lives in your system tray, inspired by [Screenie](https://www.screenie.io/) for macOS.
+A powerful screenshot manager for Windows with AI-powered semantic search. Lives in your system tray, inspired by [Screenie](https://www.thnkdev.com/Screenie/) for macOS.
 
 ![Sukusho Screenshot](docs/screenshot.webp)
 
@@ -180,6 +180,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
-- Inspired by [Screenie](https://www.screenie.io/) for macOS
+- Inspired by [Screenie](https://www.thnkdev.com/Screenie/) for macOS
 - Built with [GPUI](https://gpui.rs/) by the [Zed](https://zed.dev/) team
 - UI components from [gpui-component](https://github.com/longbridge/gpui-component)
